@@ -1,0 +1,15 @@
+{
+  "server": {
+    "port": 8080
+  },
+  "llm": {
+    "provider": "ollama",
+    "ollama": {
+      "enabled": true,
+      "endpoint": "http://192.168.1.222:11434",
+      "model": "gemma3:1b",
+      "max_tokens": 256,
+      "timeout_seconds": 100
+    }
+  }
+}

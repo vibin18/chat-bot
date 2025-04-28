@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM Chat Bot</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>LLM Chat Bot</h1>
+            <p>Chat with Ollama powered by langchaingo</p>
+        </header>
+        
+        <main>
+            <div class="chats-container">
+                <div class="chats-header">
+                    <h2>Your Conversations</h2>
+                    <button id="new-chat-btn" class="primary-btn">New Chat</button>
+                </div>
+                
+                <div id="chats-list" class="chats-list">
+                    <!-- Chats will be populated here via JavaScript -->
+                    <div class="empty-state">
+                        <p>No conversations yet. Start a new chat!</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="model-info">
+                <h3>Model Information</h3>
+                <div id="model-details">Loading...</div>
+            </div>
+        </main>
+        
+        <footer>
+            <p>Using Gemma 3 1B with Ollama</p>
+            <p>&copy; 2025 LLM Chat Bot</p>
+        </footer>
+    </div>
+    
+    <script src="/static/js/main.js"></script>
+</body>
+</html>

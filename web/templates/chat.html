@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat - LLM Chat Bot</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container chat-page">
+        <header class="chat-header">
+            <a href="/" class="back-btn">&larr; Back</a>
+            <h1 id="chat-title">Chat</h1>
+        </header>
+        
+        <main class="chat-container">
+            <div id="messages" class="messages">
+                <!-- Messages will be populated here via JavaScript -->
+                <div class="empty-state">
+                    <p>Start chatting with the LLM by typing a message below!</p>
+                </div>
+            </div>
+            
+            <div class="message-input-container">
+                <form id="message-form">
+                    <textarea id="message-input" placeholder="Type your message here..." rows="3"></textarea>
+                    <button type="submit" class="primary-btn">Send</button>
+                </form>
+            </div>
+        </main>
+        
+        <footer>
+            <p>Using Gemma 3 1B with Ollama</p>
+            <p>&copy; 2025 LLM Chat Bot</p>
+        </footer>
+    </div>
+    
+    <script src="/static/js/chat.js"></script>
+</body>
+</html>
