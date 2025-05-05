@@ -2,6 +2,8 @@ package llm
 
 import (
 	"context"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/tmc/langchaingo/llms"
@@ -39,12 +41,23 @@ func NewOllamaAdapter(config *config.LLMConfig, log logger.Logger) (*OllamaAdapt
 	}, nil
 }
 
+// cleanThinkingTags removes empty thinking tags from the response
+func cleanThinkingTags(input string) string {
+	// Regular expression to match empty thinking tags: <think></think> or <think> </think>
+	re := regexp.MustCompile(`<think>\s*</think>`)
+	cleaned := re.ReplaceAllString(input, "")
+	
+	// Also trim any leading/trailing whitespace
+	return strings.TrimSpace(cleaned)
+}
+
 // GenerateResponse generates a response from the LLM for a given chat history
 func (a *OllamaAdapter) GenerateResponse(ctx context.Context, messages []domain.Message) (string, error) {
-	a.logger.Info("Generating response with Ollama", "model", a.config.Ollama.Model)
+	model := a.config.Ollama.Model
+	a.logger.Info("Generating response with Ollama", "model", model)
 	
 	// Convert domain messages to LangChain messages
-	prompt := formatMessagesAsPrompt(messages)
+	prompt := formatMessagesAsPrompt(messages, model, a.config.EnableReasoning)
 	
 	// Set generation options
 	opts := []llms.CallOption{
@@ -63,6 +76,12 @@ func (a *OllamaAdapter) GenerateResponse(ctx context.Context, messages []domain.
 		return "", err
 	}
 	
+	// Process result based on model and reasoning settings
+	if strings.HasPrefix(model, "qwen3") && !a.config.EnableReasoning {
+		a.logger.Info("Processing qwen3 response, removing empty thinking tags")
+		result = cleanThinkingTags(result)
+	}
+	
 	return result, nil
 }
 
@@ -73,20 +92,27 @@ func (a *OllamaAdapter) GetModelInfo(ctx context.Context) (map[string]interface{
 	// In a real implementation, we would call the Ollama API to get model info
 	// For now, return static info
 	return map[string]interface{}{
-		"name":      a.config.Ollama.Model,
-		"provider":  "ollama",
-		"endpoint":  a.config.Ollama.Endpoint,
-		"maxTokens": a.config.Ollama.MaxTokens,
+		"name":            a.config.Ollama.Model,
+		"provider":        "ollama",
+		"endpoint":        a.config.Ollama.Endpoint,
+		"maxTokens":       a.config.Ollama.MaxTokens,
+		"enableReasoning": a.config.EnableReasoning,
 	}, nil
 }
 
 // formatMessagesAsPrompt converts a slice of domain messages to a prompt string for Ollama
-func formatMessagesAsPrompt(messages []domain.Message) string {
-	var prompt string
+func formatMessagesAsPrompt(messages []domain.Message, model string, enableReasoning bool) string {
+	// Add system instruction for conciseness
+	prompt := "System: You are a helpful assistant. Keep your responses concise and to the point unless the user specifically asks for detailed explanations or descriptions.\n\n"
 	
-	for _, msg := range messages {
+	for i, msg := range messages {
 		if msg.Role == "user" {
-			prompt += "User: " + msg.Content + "\n"
+			// For any qwen3 model, add the /no_think suffix if reasoning is disabled
+			if strings.HasPrefix(model, "qwen3") && !enableReasoning && i == len(messages)-1 {
+				prompt += "User: " + msg.Content + "/no_think\n"
+			} else {
+				prompt += "User: " + msg.Content + "\n"
+			}
 		} else if msg.Role == "assistant" {
 			prompt += "Assistant: " + msg.Content + "\n"
 		}

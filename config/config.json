@@ -4,11 +4,12 @@
   },
   "llm": {
     "provider": "ollama",
+    "enable_reasoning": false,
     "ollama": {
       "enabled": true,
-      "endpoint": "http://192.168.1.222:11434",
-      "model": "gemma3:1b",
-      "max_tokens": 256,
+      "endpoint": "http://localhost:11434",
+      "model": "qwen3:14b",
+      "max_tokens": 4096,
       "timeout_seconds": 100
     }
   }

@@ -20,6 +20,7 @@ type ServerConfig struct {
 // LLMConfig holds configuration for the LLM backend
 type LLMConfig struct {
 	Provider        string        `json:"provider"`
+	EnableReasoning bool          `json:"enable_reasoning"`
 	Ollama          OllamaConfig  `json:"ollama"`
 	DefaultTimeout  time.Duration `json:"default_timeout"`
 	DefaultMaxToken int           `json:"default_max_tokens"`
@@ -75,7 +76,8 @@ func DefaultConfig() *Config {
 			Port: 8080,
 		},
 		LLM: LLMConfig{
-			Provider: "ollama",
+			Provider:        "ollama",
+			EnableReasoning: false,
 			Ollama: OllamaConfig{
 				Enabled:        true,
 				Endpoint:       "http://192.168.1.222:11434",
