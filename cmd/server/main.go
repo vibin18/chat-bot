@@ -15,6 +15,7 @@ import (
 	httpHandler "github.com/vibin/chat-bot/internal/adapters/primary/http"
 	"github.com/vibin/chat-bot/internal/adapters/secondary/llm"
 	"github.com/vibin/chat-bot/internal/adapters/secondary/repository"
+	"github.com/vibin/chat-bot/internal/adapters/secondary/websearch"
 	"github.com/vibin/chat-bot/internal/core/services"
 	"github.com/vibin/chat-bot/internal/logger"
 )
@@ -52,18 +53,40 @@ func main() {
 	// Initialize adapters
 	log.Info("Initializing adapters")
 
-	// Create LLM adapter
+	// Create main LLM adapter
 	llmAdapter, err := llm.NewOllamaAdapter(&cfg.LLM, log)
 	if err != nil {
-		log.Error("Failed to initialize LLM adapter", "error", err)
+		log.Error("Failed to initialize main LLM adapter", "error", err)
 		os.Exit(1)
 	}
 
 	// Create repository adapter
 	repoAdapter := repository.NewInMemoryRepository(log)
+	
+	// Create secondary LLM adapter for search query formatting
+	var secondaryLLMAdapter *llm.OllamaAdapter
+	var webSearchAdapter *websearch.SerpAPIAdapter
+	
+	if cfg.WebSearch.Enabled {
+		log.Info("Initializing secondary LLM adapter for web search")
+		// Create a temporary LLMConfig from SecondaryLLM for adapter initialization
+		secondaryLLMConfig := &config.LLMConfig{
+			Provider: cfg.SecondaryLLM.Provider,
+			Ollama:   cfg.SecondaryLLM.Ollama,
+		}
+		secondaryLLMAdapter, err = llm.NewOllamaAdapter(secondaryLLMConfig, log)
+		if err != nil {
+			log.Error("Failed to initialize secondary LLM adapter", "error", err)
+			os.Exit(1)
+		}
+		
+		// Create web search adapter
+		log.Info("Initializing web search adapter")
+		webSearchAdapter = websearch.NewSerpAPIAdapter(&cfg.WebSearch, secondaryLLMAdapter, log)
+	}
 
 	// Create chat service
-	chatService := services.NewChatService(llmAdapter, repoAdapter, log)
+	chatService := services.NewChatService(llmAdapter, repoAdapter, webSearchAdapter, cfg, log)
 
 	// Create HTTP handler
 	handler := httpHandler.NewHandler(chatService, log)

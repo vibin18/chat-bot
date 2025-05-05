@@ -2,7 +2,10 @@ package services
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
+	"github.com/vibin/chat-bot/config"
 	"github.com/vibin/chat-bot/internal/core/domain"
 	"github.com/vibin/chat-bot/internal/core/ports"
 	"github.com/vibin/chat-bot/internal/logger"
@@ -12,15 +15,19 @@ import (
 type ChatService struct {
 	llm        ports.LLMPort
 	repository ports.ChatRepositoryPort
+	webSearch  ports.WebSearchPort
 	logger     logger.Logger
+	config     *config.Config
 }
 
 // NewChatService creates a new ChatService
-func NewChatService(llm ports.LLMPort, repository ports.ChatRepositoryPort, logger logger.Logger) *ChatService {
+func NewChatService(llm ports.LLMPort, repository ports.ChatRepositoryPort, webSearch ports.WebSearchPort, config *config.Config, logger logger.Logger) *ChatService {
 	return &ChatService{
 		llm:        llm,
 		repository: repository,
+		webSearch:  webSearch,
 		logger:     logger,
+		config:     config,
 	}
 }
 
@@ -51,10 +58,20 @@ func (s *ChatService) SendMessage(ctx context.Context, chatID, content string) (
 	userMessage := domain.NewMessage("user", content)
 	chat.AddMessage(userMessage)
 	
-	// Generate response using LLM
-	s.logger.Info("Generating LLM response", "chat_id", chatID)
+	// Process the response based on the user's message
+	var response string
 	
-	response, err := s.llm.GenerateResponse(ctx, chat.Messages)
+	// Check if web search is enabled and if the message indicates a need for search
+	if s.config.WebSearch.Enabled && s.webSearch != nil && s.webSearch.DetectSearchIntent(content) {
+		// Web search path
+		s.logger.Info("Using web search pipeline", "chat_id", chatID)
+		response, err = s.processWebSearchRequest(ctx, content, chat.Messages)
+	} else {
+		// Regular LLM path
+		s.logger.Info("Generating standard LLM response", "chat_id", chatID)
+		response, err = s.llm.GenerateResponse(ctx, chat.Messages)
+	}
+	
 	if err != nil {
 		s.logger.Error("Failed to generate response", "chat_id", chatID, "error", err)
 		return nil, err
@@ -96,4 +113,68 @@ func (s *ChatService) DeleteChat(ctx context.Context, id string) error {
 func (s *ChatService) GetModelInfo(ctx context.Context) (map[string]interface{}, error) {
 	s.logger.Info("Getting model information")
 	return s.llm.GetModelInfo(ctx)
+}
+
+// processWebSearchRequest processes a user request that requires web search
+func (s *ChatService) processWebSearchRequest(ctx context.Context, userContent string, chatHistory []domain.Message) (string, error) {
+	// Step 1: Format the search query using the secondary LLM
+	formattedQuery, err := s.webSearch.FormatSearchQuery(ctx, userContent)
+	if err != nil {
+		s.logger.Error("Failed to format search query", "error", err)
+		// Fall back to direct LLM response if search query formatting fails
+		return s.llm.GenerateResponse(ctx, chatHistory)
+	}
+	
+	// Step 2: Perform the web search with the formatted query
+	searchResults, err := s.webSearch.Search(ctx, formattedQuery)
+	if err != nil {
+		s.logger.Error("Web search failed", "error", err)
+		// Fall back to direct LLM response if search fails
+		return s.llm.GenerateResponse(ctx, chatHistory)
+	}
+	
+	// Step 3: Format the search results for the LLM
+	contextPrompt := formatSearchResultsForLLM(userContent, searchResults)
+	
+	// Step 4: Create a new prompt for the main LLM with search results as context
+	promptWithContext := domain.NewMessage("user", contextPrompt)
+	
+	// Replace the last message (user's query) with our enhanced prompt that includes search results
+	modifiedHistory := make([]domain.Message, len(chatHistory)-1)
+	copy(modifiedHistory, chatHistory[:len(chatHistory)-1])
+	modifiedHistory = append(modifiedHistory, promptWithContext)
+	
+	// Step 5: Generate the final response using the main LLM with search context
+	return s.llm.GenerateResponse(ctx, modifiedHistory)
+}
+
+// formatSearchResultsForLLM formats search results into a prompt for the LLM
+func formatSearchResultsForLLM(userQuery string, searchResults []ports.SearchResult) string {
+	var sb strings.Builder
+	
+	// Add the original user query
+	sb.WriteString(fmt.Sprintf("I need information about: %s\n\n", userQuery))
+	
+	// Add search results as context
+	sb.WriteString("Here is the latest information I found from web search:\n\n")
+	
+	// Add up to 5 search results
+	resultCount := len(searchResults)
+	if resultCount > 5 {
+		resultCount = 5
+	}
+	
+	for i := 0; i < resultCount; i++ {
+		result := searchResults[i]
+		sb.WriteString(fmt.Sprintf("[%d] %s\n", i+1, result.Title))
+		sb.WriteString(fmt.Sprintf("Link: %s\n", result.Link))
+		sb.WriteString(fmt.Sprintf("Snippet: %s\n\n", result.Snippet))
+	}
+	
+	// Add final instruction
+	sb.WriteString("Based on the above information, please provide a helpful, accurate, and concise response to my query. ")
+	sb.WriteString("Cite specific sources where appropriate by referring to the search result number. ")
+	sb.WriteString("If the search results don't provide sufficient information, please clearly indicate this and give the best response you can based on your knowledge.")
+	
+	return sb.String()
 }

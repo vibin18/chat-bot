@@ -8,8 +8,10 @@ import (
 
 // Config represents the application configuration
 type Config struct {
-	Server ServerConfig `json:"server"`
-	LLM    LLMConfig    `json:"llm"`
+	Server       ServerConfig       `json:"server"`
+	LLM          LLMConfig          `json:"llm"`
+	WebSearch    WebSearchConfig    `json:"websearch"`
+	SecondaryLLM SecondaryLLMConfig `json:"secondary_llm"`
 }
 
 // ServerConfig holds HTTP server configuration
@@ -33,6 +35,19 @@ type OllamaConfig struct {
 	Model          string        `json:"model"`
 	MaxTokens      int           `json:"max_tokens"`
 	TimeoutSeconds time.Duration `json:"timeout_seconds"`
+}
+
+// WebSearchConfig holds configuration for web search functionality
+type WebSearchConfig struct {
+	Enabled        bool     `json:"enabled"`
+	SerpAPIKey     string   `json:"serpapi_key"`
+	IntentKeywords []string `json:"intent_keywords"`
+}
+
+// SecondaryLLMConfig holds configuration for the secondary LLM
+type SecondaryLLMConfig struct {
+	Provider string       `json:"provider"`
+	Ollama   OllamaConfig `json:"ollama"`
 }
 
 // LoadConfig loads configuration from a JSON file
@@ -80,13 +95,28 @@ func DefaultConfig() *Config {
 			EnableReasoning: false,
 			Ollama: OllamaConfig{
 				Enabled:        true,
-				Endpoint:       "http://192.168.1.222:11434",
-				Model:          "gemma3:1b",
-				MaxTokens:      256,
+				Endpoint:       "http://localhost:11434",
+				Model:          "qwen3:14b",
+				MaxTokens:      4096,
 				TimeoutSeconds: 100,
 			},
 			DefaultTimeout:  100 * time.Second,
-			DefaultMaxToken: 256,
+			DefaultMaxToken: 4096,
+		},
+		WebSearch: WebSearchConfig{
+			Enabled: true,
+			SerpAPIKey: "",
+			IntentKeywords: []string{"now", "today", "latest", "current", "news", "weather", "score", "price", "recent", "update"},
+		},
+		SecondaryLLM: SecondaryLLMConfig{
+			Provider: "ollama",
+			Ollama: OllamaConfig{
+				Enabled:        true,
+				Endpoint:       "http://localhost:11434",
+				Model:          "gemma3:1b",
+				MaxTokens:      256,
+				TimeoutSeconds: 30,
+			},
 		},
 	}
 }
