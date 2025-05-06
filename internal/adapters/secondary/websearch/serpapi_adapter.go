@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	serpapi "github.com/serpapi/google-search-results-golang"
 	"github.com/vibin/chat-bot/config"
@@ -95,13 +96,21 @@ func (a *SerpAPIAdapter) Search(ctx context.Context, query string) ([]ports.Sear
 func (a *SerpAPIAdapter) FormatSearchQuery(ctx context.Context, userQuery string) (string, error) {
 	a.logger.Info("Formatting search query", "user_query", userQuery)
 
+	// Get current date and time for context
+	currentTime := time.Now()
+	dateContext := currentTime.Format("January 2, 2006 15:04 MST")
+	a.logger.Info("Adding date context to query", "date_context", dateContext)
+
 	// Create prompt for the secondary LLM
 	prompt := fmt.Sprintf(
 		"Your task is to format the following user query into an effective web search query. "+
 			"Extract the key information and create a concise, focused search query. "+
+			"The current date and time is: %s. "+
+			"If the query asks for current information, incorporate time context appropriately. "+
 			"Do not add any explanation, just return the search query.\n\n"+
 			"User query: %s\n\n"+
 			"Search query:",
+		dateContext,
 		userQuery,
 	)
 
@@ -114,6 +123,10 @@ func (a *SerpAPIAdapter) FormatSearchQuery(ctx context.Context, userQuery string
 
 	// Clean up the formatted query
 	formattedQuery = strings.TrimSpace(formattedQuery)
+	
+	// Add date directly to the query
+	shortDate := currentTime.Format("Jan 2, 2006")
+	formattedQuery = fmt.Sprintf("%s as of today: %s", formattedQuery, shortDate)
 	
 	a.logger.Info("Formatted search query", "formatted_query", formattedQuery)
 	return formattedQuery, nil

@@ -16,6 +16,7 @@ import (
 	"github.com/vibin/chat-bot/internal/adapters/secondary/llm"
 	"github.com/vibin/chat-bot/internal/adapters/secondary/repository"
 	"github.com/vibin/chat-bot/internal/adapters/secondary/websearch"
+	"github.com/vibin/chat-bot/internal/core/ports"
 	"github.com/vibin/chat-bot/internal/core/services"
 	"github.com/vibin/chat-bot/internal/logger"
 )
@@ -65,7 +66,7 @@ func main() {
 	
 	// Create secondary LLM adapter for search query formatting
 	var secondaryLLMAdapter *llm.OllamaAdapter
-	var webSearchAdapter *websearch.SerpAPIAdapter
+	var webSearchAdapter ports.WebSearchPort
 	
 	if cfg.WebSearch.Enabled {
 		log.Info("Initializing secondary LLM adapter for web search")
@@ -80,9 +81,20 @@ func main() {
 			os.Exit(1)
 		}
 		
-		// Create web search adapter
-		log.Info("Initializing web search adapter")
-		webSearchAdapter = websearch.NewSerpAPIAdapter(&cfg.WebSearch, secondaryLLMAdapter, log)
+		// Create web search adapter based on config
+		log.Info("Initializing web search adapter", "provider", cfg.WebSearch.Provider)
+		
+		switch cfg.WebSearch.Provider {
+		case "brave":
+			webSearchAdapter = websearch.NewBraveAdapter(&cfg.WebSearch, secondaryLLMAdapter, log)
+			log.Info("Using Brave Search adapter")
+		case "serpapi", "":
+			webSearchAdapter = websearch.NewSerpAPIAdapter(&cfg.WebSearch, secondaryLLMAdapter, log)
+			log.Info("Using SerpAPI adapter")
+		default:
+			log.Warn("Unknown web search provider, falling back to SerpAPI", "provider", cfg.WebSearch.Provider)
+			webSearchAdapter = websearch.NewSerpAPIAdapter(&cfg.WebSearch, secondaryLLMAdapter, log)
+		}
 	}
 
 	// Create chat service

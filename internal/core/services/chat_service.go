@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/vibin/chat-bot/config"
 	"github.com/vibin/chat-bot/internal/core/domain"
@@ -152,8 +153,13 @@ func (s *ChatService) processWebSearchRequest(ctx context.Context, userContent s
 func formatSearchResultsForLLM(userQuery string, searchResults []ports.SearchResult) string {
 	var sb strings.Builder
 	
-	// Add the original user query
+	// Add current date and time information
+	currentTime := time.Now()
+	dateStr := currentTime.Format("Monday, January 2, 2006 at 15:04 MST")
+	
+	// Add the original user query with date context
 	sb.WriteString(fmt.Sprintf("I need information about: %s\n\n", userQuery))
+	sb.WriteString(fmt.Sprintf("The current date and time is: %s\n\n", dateStr))
 	
 	// Add search results as context
 	sb.WriteString("Here is the latest information I found from web search:\n\n")

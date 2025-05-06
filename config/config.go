@@ -40,7 +40,9 @@ type OllamaConfig struct {
 // WebSearchConfig holds configuration for web search functionality
 type WebSearchConfig struct {
 	Enabled        bool     `json:"enabled"`
+	Provider       string   `json:"provider"`      // "serpapi" or "brave"
 	SerpAPIKey     string   `json:"serpapi_key"`
+	BraveAPIKey    string   `json:"brave_api_key"`
 	IntentKeywords []string `json:"intent_keywords"`
 }
 
@@ -105,7 +107,9 @@ func DefaultConfig() *Config {
 		},
 		WebSearch: WebSearchConfig{
 			Enabled: true,
-			SerpAPIKey: "",
+			Provider: "serpapi", // Default to serpapi, can be changed to "brave"
+			SerpAPIKey: "", 
+			BraveAPIKey: "",
 			IntentKeywords: []string{"now", "today", "latest", "current", "news", "weather", "score", "price", "recent", "update"},
 		},
 		SecondaryLLM: SecondaryLLMConfig{
