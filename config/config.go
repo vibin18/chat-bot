@@ -12,6 +12,7 @@ type Config struct {
 	LLM          LLMConfig          `json:"llm"`
 	WebSearch    WebSearchConfig    `json:"websearch"`
 	SecondaryLLM SecondaryLLMConfig `json:"secondary_llm"`
+	WhatsApp     WhatsAppConfig     `json:"whatsapp"`
 }
 
 // ServerConfig holds HTTP server configuration
@@ -50,6 +51,15 @@ type WebSearchConfig struct {
 type SecondaryLLMConfig struct {
 	Provider string       `json:"provider"`
 	Ollama   OllamaConfig `json:"ollama"`
+}
+
+// WhatsAppConfig holds configuration for the WhatsApp integration
+type WhatsAppConfig struct {
+	Enabled      bool     `json:"enabled"`
+	BotName      string   `json:"bot_name"`
+	TriggerWord  string   `json:"trigger_word"`
+	StoreDir     string   `json:"store_dir"`
+	AllowedGroups []string `json:"allowed_groups"`
 }
 
 // LoadConfig loads configuration from a JSON file
@@ -121,6 +131,13 @@ func DefaultConfig() *Config {
 				MaxTokens:      256,
 				TimeoutSeconds: 30,
 			},
+		},
+		WhatsApp: WhatsAppConfig{
+			Enabled:      false,
+			BotName:      "Sasi",
+			TriggerWord:  "@sasi",
+			StoreDir:     "./data/whatsapp",
+			AllowedGroups: []string{},
 		},
 	}
 }

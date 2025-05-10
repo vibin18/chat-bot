@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Admin - Chat Bot</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css">
+    <style>
+        body {
+            padding-top: 2rem;
+            background-color: #f8f9fa;
+        }
+        .card {
+            margin-bottom: 1.5rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .card-header {
+            background-color: #f1f8ff;
+            font-weight: bold;
+        }
+        .group-item {
+            display: flex;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid #dee2e6;
+        }
+        .group-item:last-child {
+            border-bottom: none;
+        }
+        .group-name {
+            flex-grow: 1;
+            font-weight: 500;
+        }
+        .group-id {
+            color: #6c757d;
+            font-size: 0.85rem;
+            margin-right: 1rem;
+        }
+        .member-count {
+            color: #6c757d;
+            font-size: 0.85rem;
+            white-space: nowrap;
+            margin-right: 1rem;
+        }
+        .connection-status {
+            padding: 0.5rem;
+            margin-bottom: 1rem;
+            border-radius: 0.25rem;
+        }
+        .status-connected {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .status-disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .loading-spinner {
+            text-align: center;
+            padding: 2rem;
+        }
+        #save-button-container {
+            text-align: right;
+            margin-top: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-md-10">
+                <h1 class="mb-4">WhatsApp Admin Panel</h1>
+                
+                <!-- Connection Status -->
+                <div id="connection-status" class="connection-status">
+                    Checking connection status...
+                </div>
+                
+                <!-- Groups Card -->
+                <div class="card">
+                    <div class="card-header">
+                        Manage WhatsApp Groups
+                    </div>
+                    <div class="card-body">
+                        <p class="card-text">
+                            Select which groups the bot should respond to when mentioned with "@sasi" trigger word.
+                        </p>
+                        
+                        <div id="groups-container">
+                            <div class="loading-spinner">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <p class="mt-2">Loading groups...</p>
+                            </div>
+                        </div>
+                        
+                        <div id="save-button-container" class="d-none">
+                            <button id="save-groups" class="btn btn-primary">Save Changes</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Information Card -->
+                <div class="card">
+                    <div class="card-header">
+                        Information
+                    </div>
+                    <div class="card-body">
+                        <h5 class="card-title">QR Code Authentication</h5>
+                        <p class="card-text">
+                            When connecting for the first time, a QR code will be displayed in the console. 
+                            Scan this with your WhatsApp mobile app to authenticate the bot.
+                        </p>
+                        
+                        <h5 class="card-title mt-3">WhatsApp API Rate Limits</h5>
+                        <p class="card-text">
+                            This implementation respects WhatsApp API rate limits to avoid being blocked.
+                            The bot is configured to send no more than 10 messages per second.
+                        </p>
+                        
+                        <h5 class="card-title mt-3">Group Detection</h5>
+                        <p class="card-text">
+                            New groups will appear in this list after the bot is added to them. The bot will only
+                            respond to groups that are selected in the list above.
+                        </p>
+                        
+                        <a href="/" class="btn btn-secondary mt-3">Back to Main Page</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Check WhatsApp connection status
+            checkStatus();
+            
+            // Load groups
+            loadGroups();
+            
+            // Set up save button
+            document.getElementById('save-groups').addEventListener('click', saveGroups);
+        });
+        
+        // Check WhatsApp connection status
+        function checkStatus() {
+            fetch('/api/whatsapp/status')
+                .then(response => response.json())
+                .then(data => {
+                    const statusEl = document.getElementById('connection-status');
+                    
+                    if (data.enabled) {
+                        if (data.connected) {
+                            statusEl.className = 'connection-status status-connected';
+                            statusEl.innerHTML = '<strong>Status:</strong> Connected to WhatsApp';
+                        } else {
+                            statusEl.className = 'connection-status status-disconnected';
+                            statusEl.innerHTML = '<strong>Status:</strong> WhatsApp is enabled but not connected. Check the console for QR code or connection issues.';
+                        }
+                    } else {
+                        statusEl.className = 'connection-status status-disconnected';
+                        statusEl.innerHTML = '<strong>Status:</strong> WhatsApp integration is disabled. Enable it in config.json and restart the server.';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error checking status:', error);
+                    const statusEl = document.getElementById('connection-status');
+                    statusEl.className = 'connection-status status-disconnected';
+                    statusEl.textContent = 'Error checking WhatsApp status. See console for details.';
+                });
+        }
+        
+        // Load WhatsApp groups
+        function loadGroups() {
+            fetch('/api/whatsapp/groups')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to load groups: ' + response.statusText);
+                    }
+                    return response.json();
+                })
+                .then(groups => {
+                    const container = document.getElementById('groups-container');
+                    container.innerHTML = '';
+                    
+                    if (groups.length === 0) {
+                        container.innerHTML = '<p class="text-center p-3">No WhatsApp groups found. Add the bot to a group to see it here.</p>';
+                        return;
+                    }
+                    
+                    // Sort groups by name
+                    groups.sort((a, b) => a.name.localeCompare(b.name));
+                    
+                    // Create group list
+                    groups.forEach(group => {
+                        const groupEl = document.createElement('div');
+                        groupEl.className = 'group-item';
+                        
+                        const checkbox = document.createElement('input');
+                        checkbox.type = 'checkbox';
+                        checkbox.className = 'form-check-input me-3';
+                        checkbox.value = group.id;
+                        checkbox.checked = group.is_allowed;
+                        checkbox.id = 'group-' + group.id.replace(/[^a-zA-Z0-9]/g, '-');
+                        
+                        const nameEl = document.createElement('label');
+                        nameEl.className = 'group-name';
+                        nameEl.htmlFor = checkbox.id;
+                        nameEl.textContent = group.name || 'Unnamed Group';
+                        
+                        const membersEl = document.createElement('span');
+                        membersEl.className = 'member-count';
+                        membersEl.textContent = group.member_count + ' members';
+                        
+                        const idEl = document.createElement('span');
+                        idEl.className = 'group-id';
+                        idEl.textContent = group.id.split('@')[0];
+                        
+                        groupEl.appendChild(checkbox);
+                        groupEl.appendChild(nameEl);
+                        groupEl.appendChild(membersEl);
+                        groupEl.appendChild(idEl);
+                        
+                        container.appendChild(groupEl);
+                    });
+                    
+                    // Show save button
+                    document.getElementById('save-button-container').classList.remove('d-none');
+                })
+                .catch(error => {
+                    console.error('Error loading groups:', error);
+                    const container = document.getElementById('groups-container');
+                    container.innerHTML = `
+                        <div class="alert alert-danger" role="alert">
+                            Failed to load WhatsApp groups. ${error.message}
+                        </div>
+                    `;
+                });
+        }
+        
+        // Save selected groups
+        function saveGroups() {
+            const saveBtn = document.getElementById('save-groups');
+            saveBtn.disabled = true;
+            saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving...';
+            
+            const checkboxes = document.querySelectorAll('#groups-container input[type="checkbox"]');
+            const allowedGroups = Array.from(checkboxes)
+                .filter(cb => cb.checked)
+                .map(cb => cb.value);
+            
+            fetch('/api/whatsapp/groups', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    allowed_groups: allowedGroups
+                })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Failed to save settings: ' + response.statusText);
+                }
+                return response.json();
+            })
+            .then(data => {
+                saveBtn.disabled = false;
+                saveBtn.textContent = 'Save Changes';
+                
+                // Show success message
+                const alert = document.createElement('div');
+                alert.className = 'alert alert-success mt-3';
+                alert.textContent = 'Groups updated successfully!';
+                document.getElementById('save-button-container').appendChild(alert);
+                
+                setTimeout(() => {
+                    alert.remove();
+                }, 3000);
+            })
+            .catch(error => {
+                console.error('Error saving groups:', error);
+                saveBtn.disabled = false;
+                saveBtn.textContent = 'Save Changes';
+                
+                // Show error message
+                const alert = document.createElement('div');
+                alert.className = 'alert alert-danger mt-3';
+                alert.textContent = 'Error saving groups: ' + error.message;
+                document.getElementById('save-button-container').appendChild(alert);
+                
+                setTimeout(() => {
+                    alert.remove();
+                }, 5000);
+            });
+        }
+    </script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

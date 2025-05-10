@@ -13,6 +13,7 @@ import (
 
 	"github.com/vibin/chat-bot/config"
 	httpHandler "github.com/vibin/chat-bot/internal/adapters/primary/http"
+	whatsappAdapter "github.com/vibin/chat-bot/internal/adapters/primary/whatsapp"
 	"github.com/vibin/chat-bot/internal/adapters/secondary/llm"
 	"github.com/vibin/chat-bot/internal/adapters/secondary/repository"
 	"github.com/vibin/chat-bot/internal/adapters/secondary/websearch"
@@ -100,8 +101,33 @@ func main() {
 	// Create chat service
 	chatService := services.NewChatService(llmAdapter, repoAdapter, webSearchAdapter, cfg, log)
 
+	// Initialize WhatsApp adapter if enabled
+	var waAdapter ports.WhatsAppPort
+	if cfg.WhatsApp.Enabled {
+		log.Info("Initializing WhatsApp adapter")
+		whatsappAdapter, err := whatsappAdapter.NewWhatsAppAdapter(chatService, cfg, log)
+		if err != nil {
+			log.Error("Failed to initialize WhatsApp adapter", "error", err)
+		} else {
+			waAdapter = whatsappAdapter
+			
+			// Start WhatsApp adapter in a goroutine
+			go func() {
+				log.Info("Starting WhatsApp adapter")
+				if err := waAdapter.Connect(context.Background()); err != nil {
+					log.Error("Failed to connect to WhatsApp", "error", err)
+					return
+				}
+				
+				if err := waAdapter.Start(context.Background()); err != nil {
+					log.Error("WhatsApp adapter error", "error", err)
+				}
+			}()
+		}
+	}
+
 	// Create HTTP handler
-	handler := httpHandler.NewHandler(chatService, log)
+	handler := httpHandler.NewHandler(chatService, cfg, waAdapter, log)
 
 	// Create HTTP server
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)
@@ -112,6 +138,8 @@ func main() {
 		WriteTimeout: 120 * time.Second, // Longer timeout for LLM responses
 		IdleTimeout:  60 * time.Second,
 	}
+	
+
 
 	// Start the server in a goroutine
 	go func() {
@@ -137,6 +165,14 @@ func main() {
 	// Attempt graceful shutdown
 	if err := server.Shutdown(ctx); err != nil {
 		log.Error("Server forced to shutdown", "error", err)
+	}
+	
+	// Disconnect WhatsApp if it was enabled
+	if cfg.WhatsApp.Enabled && waAdapter != nil && waAdapter.IsConnected() {
+		log.Info("Disconnecting WhatsApp adapter")
+		if err := waAdapter.Disconnect(); err != nil {
+			log.Error("Error disconnecting WhatsApp adapter", "error", err)
+		}
 	}
 
 	log.Info("Server exited")

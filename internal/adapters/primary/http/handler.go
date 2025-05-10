@@ -9,6 +9,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/vibin/chat-bot/config"
+	"github.com/vibin/chat-bot/internal/core/ports"
 	"github.com/vibin/chat-bot/internal/core/services"
 	"github.com/vibin/chat-bot/internal/logger"
 )
@@ -18,13 +20,17 @@ type Handler struct {
 	service *services.ChatService
 	logger  logger.Logger
 	router  *chi.Mux
+	config  *config.Config
+	whatsappAdapter ports.WhatsAppPort
 }
 
 // NewHandler creates a new HTTP handler
-func NewHandler(service *services.ChatService, log logger.Logger) *Handler {
+func NewHandler(service *services.ChatService, cfg *config.Config, whatsappAdapter ports.WhatsAppPort, log logger.Logger) *Handler {
 	h := &Handler{
 		service: service,
 		logger:  log,
+		config:  cfg,
+		whatsappAdapter: whatsappAdapter,
 	}
 	
 	h.setupRouter()
@@ -68,11 +74,21 @@ func (h *Handler) setupRouter() {
 		})
 		
 		r.Get("/model", h.GetModelInfo)
+		
+		// WhatsApp admin routes
+		if h.config.WhatsApp.Enabled && h.whatsappAdapter != nil {
+			h.setupWhatsAppAdminRoutes(r)
+		}
 	})
 	
 	// Web UI routes
 	r.Get("/", h.HomePage)
 	r.Get("/chat/{chatID}", h.ChatPage)
+	
+	// WhatsApp admin UI
+	if h.config.WhatsApp.Enabled {
+		r.Get("/admin/whatsapp", h.WhatsAppAdminPage)
+	}
 	
 	h.router = r
 }
