@@ -57,7 +57,8 @@ type SecondaryLLMConfig struct {
 type WhatsAppConfig struct {
 	Enabled      bool     `json:"enabled"`
 	BotName      string   `json:"bot_name"`
-	TriggerWord  string   `json:"trigger_word"`
+	TriggerWords []string `json:"trigger_words"`
+	TriggerWord  string   `json:"trigger_word"` // Deprecated: kept for backward compatibility
 	StoreDir     string   `json:"store_dir"`
 	AllowedGroups []string `json:"allowed_groups"`
 }
@@ -135,7 +136,8 @@ func DefaultConfig() *Config {
 		WhatsApp: WhatsAppConfig{
 			Enabled:      false,
 			BotName:      "Sasi",
-			TriggerWord:  "@sasi",
+			TriggerWords: []string{"@sasi", "sasi", "Sasi"},
+			TriggerWord:  "@sasi", // Deprecated: kept for backward compatibility
 			StoreDir:     "./data/whatsapp",
 			AllowedGroups: []string{},
 		},

@@ -36,6 +36,9 @@ type WhatsAppAdapter struct {
 	conversations map[string]*Conversation
 	mutex        sync.RWMutex
 	limiter      *rate.Limiter // Rate limiter for WhatsApp API calls
+	memoryManager *MemoryManager // Memory manager for context and memories
+	formatter    *WhatsAppFormatter // Formatter for enhancing WhatsApp messages
+	responses    *PredefinedResponses // Handler for predefined responses
 }
 
 // Conversation represents an active conversation
@@ -66,7 +69,11 @@ func NewWhatsAppAdapter(chatService *services.ChatService, config *config.Config
 		log:          logger,
 		config:       &config.WhatsApp,
 		conversations: make(map[string]*Conversation),
+		mutex:        sync.RWMutex{},
 		limiter:      limiter,
+		memoryManager: NewMemoryManager(),
+		formatter:    NewWhatsAppFormatter(),
+		responses:    NewPredefinedResponses(),
 	}
 
 	return adapter, nil
@@ -203,8 +210,19 @@ func (a *WhatsAppAdapter) handleMessage(evt *events.Message) {
 	// Check if this is a reply to our bot's message
 	isReplyToBot := a.isReplyToBot(evt)
 	
-	// Process if it's a mention with trigger word OR it's a direct reply to the bot
-	isMention := strings.Contains(strings.ToLower(message), strings.ToLower(a.config.TriggerWord))
+	// Check if it contains any of the trigger words
+	isMention := false
+	for _, triggerWord := range a.config.TriggerWords {
+		if strings.Contains(strings.ToLower(message), strings.ToLower(triggerWord)) {
+			isMention = true
+			break
+		}
+	}
+	
+	// Fallback to the deprecated single trigger word if needed
+	if !isMention && a.config.TriggerWord != "" {
+		isMention = strings.Contains(strings.ToLower(message), strings.ToLower(a.config.TriggerWord))
+	}
 	
 	if !isMention && !isReplyToBot {
 		return
@@ -219,25 +237,55 @@ func (a *WhatsAppAdapter) handleMessage(evt *events.Message) {
 	// Clean the message by removing the trigger word if present
 	cleanMessage := message
 	if isMention {
-		cleanMessage = strings.ReplaceAll(
-			strings.ToLower(message), 
-			strings.ToLower(a.config.TriggerWord), 
-			"",
-		)
+		// Replace all trigger words
+		for _, triggerWord := range a.config.TriggerWords {
+			cleanMessage = strings.ReplaceAll(
+				strings.ToLower(cleanMessage), 
+				strings.ToLower(triggerWord), 
+				"",
+			)
+		}
+		
+		// Also handle the deprecated single trigger word
+		if a.config.TriggerWord != "" {
+			cleanMessage = strings.ReplaceAll(
+				strings.ToLower(cleanMessage), 
+				strings.ToLower(a.config.TriggerWord), 
+				"",
+			)
+		}
 	}
 	cleanMessage = strings.TrimSpace(cleanMessage)
 	
 	// Generate response asynchronously
-	go a.processAndReply(conversationID, cleanMessage, evt)
+	go a.processAndReply(conversationID, cleanMessage, evt, isReplyToBot)
 }
 
 // processAndReply processes a message and sends a reply
-func (a *WhatsAppAdapter) processAndReply(conversationID string, message string, evt *events.Message) {
+func (a *WhatsAppAdapter) processAndReply(conversationID string, message string, evt *events.Message, isReplyToBot bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	// Record in conversation history
 	a.recordMessage(conversationID, fmt.Sprintf("User: %s", message))
+
+	// Always add to context for this conversation
+	a.memoryManager.AddContextMessage(conversationID, fmt.Sprintf("User: %s", message))
+	
+	// Check if we have a predefined response for this message
+	if predefinedResponse, found := a.responses.CheckForPredefinedResponse(message); found {
+		a.log.Info("Using predefined response")
+		
+		// Record the response in our conversation
+		a.recordMessage(conversationID, fmt.Sprintf("Bot: %s", predefinedResponse))
+		
+		// Also add to context
+		a.memoryManager.AddContextMessage(conversationID, fmt.Sprintf("Bot: %s", predefinedResponse))
+		
+		// Send the predefined response
+		a.sendReply(predefinedResponse, evt)
+		return
+	}
 
 	// Create a chat if it doesn't exist
 	chat, err := a.chatService.GetChat(ctx, conversationID)
@@ -251,8 +299,42 @@ func (a *WhatsAppAdapter) processAndReply(conversationID string, message string,
 		}
 	}
 	
+	// If this is a reply to our bot, enhance the message with context and memories
+	enhancedMessage := message
+	if isReplyToBot {
+		// Get context and memories for this conversation
+		context := a.memoryManager.GetContext(conversationID)
+		memories := a.memoryManager.GetMemories(conversationID)
+		
+		// Build enhanced message with context and memories
+		var contextStr strings.Builder
+		contextStr.WriteString("[CONTEXT]\n")
+		for _, ctx := range context {
+			contextStr.WriteString(ctx)
+			contextStr.WriteString("\n")
+		}
+		contextStr.WriteString("[/CONTEXT]\n\n")
+		
+		if len(memories) > 0 {
+			contextStr.WriteString("[MEMORIES]\n")
+			for _, mem := range memories {
+				contextStr.WriteString(mem.Content)
+				contextStr.WriteString("\n")
+			}
+			contextStr.WriteString("[/MEMORIES]\n\n")
+		}
+		
+		contextStr.WriteString("User's message: " + message)
+		enhancedMessage = contextStr.String()
+		
+		a.log.Info("Enhanced message with context and memories", 
+			"conversation_id", conversationID, 
+			"context_length", len(context), 
+			"memories_length", len(memories))
+	}
+	
 	// Send message through the chat service
-	updatedChat, err := a.chatService.SendMessage(ctx, chat.ID, message)
+	updatedChat, err := a.chatService.SendMessage(ctx, chat.ID, enhancedMessage)
 	if err != nil {
 		a.log.Error("Failed to process message", "error", err)
 		return
@@ -277,6 +359,12 @@ func (a *WhatsAppAdapter) processAndReply(conversationID string, message string,
 	
 	// Record the response in our conversation
 	a.recordMessage(conversationID, fmt.Sprintf("Bot: %s", response))
+	
+	// Also add to context
+	a.memoryManager.AddContextMessage(conversationID, fmt.Sprintf("Bot: %s", response))
+	
+	// Extract potential memories from this exchange
+	a.memoryManager.ExtractMemories(conversationID, message, response)
 	
 	// Send the response
 	a.sendReply(response, evt)
@@ -396,16 +484,19 @@ func (a *WhatsAppAdapter) sendReply(response string, evt *events.Message) {
 		return
 	}
 
+	// Format the response for WhatsApp with emojis and better formatting
+	formattedResponse := a.formatter.Format(response)
+	
 	// Log debug information
 	a.log.Info("Sending WhatsApp reply", 
 		"chat_jid", evt.Info.Chat.String(),
-		"response_length", len(response),
+		"response_length", len(formattedResponse),
 		"sender", evt.Info.Sender.String())
 	
 	// Create a message with proper reply context for threads
 	msg := &waProto.Message{
 		ExtendedTextMessage: &waProto.ExtendedTextMessage{
-			Text: proto.String(response),
+			Text: proto.String(formattedResponse),
 			ContextInfo: &waProto.ContextInfo{
 				StanzaID:      proto.String(evt.Info.ID),
 				Participant:   proto.String(evt.Info.Sender.String()),
