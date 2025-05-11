@@ -25,6 +25,8 @@ func (h *Handler) setupWhatsAppAdminRoutes(r chi.Router) {
 		r.Route("/memory", func(r chi.Router) {
 			r.Get("/all", h.handleGetAllMemories)
 			r.Get("/conversation", h.handleGetConversationMemory)
+			r.Get("/users", h.handleGetUsersInConversation)
+			r.Get("/user", h.handleGetUserMemories)
 			r.Post("/delete", h.handleDeleteMemory)
 			r.Post("/clear", h.handleClearAllMemories)
 			r.Post("/update", h.handleUpdateMemory)

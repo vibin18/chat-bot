@@ -359,38 +359,39 @@
             document.getElementById('two-pane-view').style.display = 'flex';
             document.querySelector('.group-selector').style.display = 'none';
             
-            // First, load the conversation details to get all user information
-            fetch(`/api/whatsapp/memory/conversation?id=${groupId}`)
-                .then(response => response.json())
-                .then(data => {
-                    debugLog('Group details received:', data);
+            // Load users in the conversation
+            fetch(`/api/whatsapp/memory/users?conversation_id=${groupId}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`API responded with status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(users => {
+                    debugLog('Users received:', users);
                     
-                    // Extract unique users from the memories
-                    const users = new Map();
+                    if (!users || users.length === 0) {
+                        const usersMap = new Map();
+                        usersMap.set('default_user', { name: 'Default User', count: 0 });
+                        displayUsers(usersMap, groupName);
+                        return;
+                    }
                     
-                    // For demo purposes, we'll create some sample users
-                    // In a real implementation, this would extract actual user IDs from the data
-                    users.set('default_user', { name: 'Default User', count: 0 });
-                    
-                    // In a real implementation, you would extract actual users from memory data
-                    // Here we're creating some sample users for the demo
-                    const sampleUsers = [
-                        { id: 'user1', name: 'Alice', count: Math.floor(Math.random() * 10) },
-                        { id: 'user2', name: 'Bob', count: Math.floor(Math.random() * 10) },
-                        { id: 'user3', name: 'Charlie', count: Math.floor(Math.random() * 10) },
-                        { id: 'user4', name: 'Dave', count: Math.floor(Math.random() * 10) }
-                    ];
-                    
-                    sampleUsers.forEach(user => {
-                        users.set(user.id, user);
+                    // Convert to Map for the display function
+                    const usersMap = new Map();
+                    users.forEach(user => {
+                        usersMap.set(user.user_id, {
+                            name: user.name,
+                            count: user.memory_count
+                        });
                     });
                     
                     // Display users in the sidebar
-                    displayUsers(users, groupName);
+                    displayUsers(usersMap, groupName);
                 })
                 .catch(error => {
-                    console.error('Error loading group details:', error);
-                    alert('Error loading group details. Please try again.');
+                    console.error('Error loading users:', error);
+                    alert('Error loading users. Please try again.');
                 });
         }
         
@@ -433,41 +434,43 @@
             document.getElementById('user-memories-section').style.display = 'block';
             document.querySelector('.select-prompt').style.display = 'none';
             
-            // In a production implementation, we would fetch user-specific memories
-            // For this demo, we'll create sample data
-            const sampleMemories = [
-                { 
-                    content: `${userName} likes coffee`, 
-                    created_at: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-                    last_used: new Date().toISOString(),
-                    use_count: 5
-                },
-                { 
-                    content: `${userName}'s favorite color is blue`, 
-                    created_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-                    last_used: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-                    use_count: 3
-                },
-                { 
-                    content: `${userName} lives in New York`, 
-                    created_at: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
-                    last_used: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-                    use_count: 8
-                }
-            ];
+            // Clear containers before loading
+            document.getElementById('user-memories-container').innerHTML = '<p>Loading memories...</p>';
+            document.getElementById('user-context-container').innerHTML = '<p>Loading context messages...</p>';
             
-            // Display the memories
-            displayUserMemories(sampleMemories);
-            
-            // Display sample context messages
-            const sampleContext = [
-                `User: Hi, my name is ${userName}`,
-                `Bot: Nice to meet you, ${userName}! 👋`,
-                `User: I live in New York`,
-                `Bot: New York is a wonderful city! 🌆 How's the weather there?`
-            ];
-            
-            displayUserContext(sampleContext);
+            // Fetch user-specific memories from the API
+            fetch(`/api/whatsapp/memory/user?conversation_id=${currentGroupId}&user_id=${userId}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`API responded with status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    debugLog('User memories received:', data);
+                    
+                    // Display memories and context
+                    if (data.memories && data.memories.length > 0) {
+                        displayUserMemories(data.memories);
+                    } else {
+                        document.getElementById('user-memories-container').innerHTML = 
+                            '<p>No memories found for this user.</p>';
+                    }
+                    
+                    if (data.context && data.context.length > 0) {
+                        displayUserContext(data.context);
+                    } else {
+                        document.getElementById('user-context-container').innerHTML = 
+                            '<p>No context messages found for this user.</p>';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading user memories:', error);
+                    document.getElementById('user-memories-container').innerHTML = 
+                        `<p>Error loading memories: ${error.message}. Please try again.</p>`;
+                    document.getElementById('user-context-container').innerHTML = 
+                        `<p>Error loading context messages: ${error.message}. Please try again.</p>`;
+                });
         }
         
         // Display memories for a user

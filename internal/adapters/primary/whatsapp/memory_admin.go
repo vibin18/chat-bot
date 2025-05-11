@@ -1,6 +1,7 @@
 package whatsapp
 
 import (
+	"strings"
 	"time"
 
 	"github.com/vibin/chat-bot/internal/core/ports"
@@ -177,6 +178,120 @@ func (a *WhatsAppAdapter) GetConversationDetails(conversationID string) *ports.C
 		Memories:       portMemories,
 		Context:        allContext,
 		LastActivity:   conv.LastActivity.Format(time.RFC3339),
+	}
+
+	return result
+}
+
+// GetUsersInConversation returns a list of users in a specific conversation
+func (a *WhatsAppAdapter) GetUsersInConversation(conversationID string) []ports.UserInfo {
+	a.mutex.RLock()
+	defer a.mutex.RUnlock()
+
+	// Check if conversation exists
+	_, exists := a.conversations[conversationID]
+	if !exists {
+		return nil
+	}
+
+	// Get all user IDs for this conversation
+	userIDs := a.getUserIDsForConversation(conversationID)
+	if len(userIDs) == 0 {
+		return []ports.UserInfo{}
+	}
+
+	// Get user information
+	users := make([]ports.UserInfo, 0, len(userIDs))
+	
+	for _, userID := range userIDs {
+		// Get memory count for this user
+		memoryCount := 0
+		key := createSessionKey(userID, conversationID)
+		
+		a.memoryManager.mutex.RLock()
+		if memories, exists := a.memoryManager.memories[key]; exists {
+			memoryCount = len(memories)
+		}
+		a.memoryManager.mutex.RUnlock()
+		
+		// Create a readable name for the user
+		name := a.getUserDisplayName(userID)
+		
+		users = append(users, ports.UserInfo{
+			UserID:      userID,
+			Name:        name,
+			MemoryCount: memoryCount,
+		})
+	}
+
+	return users
+}
+
+// getUserDisplayName returns a human-readable name for a user
+func (a *WhatsAppAdapter) getUserDisplayName(userID string) string {
+	// If it's default user, return "Default User"
+	if userID == "default_user" {
+		return "Default User"
+	}
+	
+	// Try to get name from WhatsApp if client is connected
+	if a.client != nil {
+		// Parse JID
+		jid, err := types.ParseJID(userID)
+		if err == nil && !jid.IsEmpty() {
+			// Try to get contact info
+			contact, err := a.client.Store.Contacts.GetContact(jid)
+			if err == nil && contact.PushName != "" {
+				return contact.PushName
+			}
+			
+			// If contact name isn't available, get the phone number or username
+			if jid.User != "" {
+				// For user-style JIDs, use the user part
+				return jid.User
+			}
+		}
+	}
+	
+	// Use first part of user ID or the full ID if can't split
+	idParts := strings.Split(userID, "@")
+	if len(idParts) > 0 && idParts[0] != "" {
+		return idParts[0]
+	}
+	
+	// Fallback to user ID if all else fails
+	return userID
+}
+
+// GetUserMemories returns memories and context for a specific user in a conversation
+func (a *WhatsAppAdapter) GetUserMemories(conversationID, userID string) *ports.UserMemories {
+	a.mutex.RLock()
+	defer a.mutex.RUnlock()
+
+	// Check if conversation exists
+	conv, exists := a.conversations[conversationID]
+	if !exists {
+		return nil
+	}
+
+	// Get memories and context for this user
+	memories := a.memoryManager.GetMemories(userID, conversationID)
+	context := a.memoryManager.GetContext(userID, conversationID)
+
+	// Convert memories to port format
+	portMemories := make([]ports.Memory, len(memories))
+	for i, memory := range memories {
+		portMemories[i] = convertMemoryToPortMemory(memory)
+	}
+
+	// Create result
+	result := &ports.UserMemories{
+		ConversationID: conversationID,
+		GroupName:      conv.GroupName,
+		UserID:         userID,
+		UserName:       a.getUserDisplayName(userID),
+		Memories:       portMemories,
+		Context:        context,
 	}
 
 	return result

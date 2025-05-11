@@ -36,6 +36,23 @@ type ConversationDetails struct {
 	LastActivity   string    `json:"last_activity"`
 }
 
+// UserInfo contains basic information about a user in a conversation
+type UserInfo struct {
+	UserID      string `json:"user_id"`
+	Name        string `json:"name"`
+	MemoryCount int    `json:"memory_count"`
+}
+
+// UserMemories provides memory and context details for a specific user in a conversation
+type UserMemories struct {
+	ConversationID string   `json:"conversation_id"`
+	GroupName      string   `json:"group_name"`
+	UserID         string   `json:"user_id"`
+	UserName       string   `json:"user_name"`
+	Memories       []Memory `json:"memories"`
+	Context        []string `json:"context"`
+}
+
 // WhatsAppPort is the interface for WhatsApp integration
 type WhatsAppPort interface {
 	// Connect establishes the connection to WhatsApp
@@ -56,11 +73,19 @@ type WhatsAppPort interface {
 	// UpdateAllowedGroups updates the allowed groups configuration
 	UpdateAllowedGroups(groups []string) error
 	
+	// Memory admin methods
+	
 	// GetAllMemoryInfo returns summary info for all conversations with memories
 	GetAllMemoryInfo() []MemoryInfo
 	
 	// GetConversationDetails returns detailed memory and context for a specific conversation
 	GetConversationDetails(conversationID string) *ConversationDetails
+	
+	// GetUsersInConversation returns a list of users in a specific conversation
+	GetUsersInConversation(conversationID string) []UserInfo
+	
+	// GetUserMemories returns memories and context for a specific user in a conversation
+	GetUserMemories(conversationID, userID string) *UserMemories
 	
 	// DeleteMemory deletes a specific memory from a conversation
 	DeleteMemory(conversationID string, memoryIndex int) bool

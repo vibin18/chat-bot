@@ -43,6 +43,8 @@ func (h *Handler) handleGetConversationMemory(w http.ResponseWriter, r *http.Req
 	h.respondWithJSON(w, http.StatusOK, details)
 }
 
+
+
 // handleDeleteMemory deletes a specific memory from a conversation
 func (h *Handler) handleDeleteMemory(w http.ResponseWriter, r *http.Request) {
 	// Check if connected
