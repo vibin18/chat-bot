@@ -19,24 +19,75 @@ func convertMemoryToPortMemory(memory Memory) ports.Memory {
 
 // getUserIDsForConversation returns all user IDs participating in a conversation
 func (a *WhatsAppAdapter) getUserIDsForConversation(conversationID string) []string {
-	// For now, we'll just use the group members or a default user ID
-	// In a real implementation, you might track participants more carefully
-	result := []string{"default_user"} // Fallback user ID
+	// In this improved implementation, we'll scan our existing memory to find user IDs
+	// that have interacted with this conversation
+	knownUsers := make(map[string]bool)
+	knownUsers["default_user"] = true // Always include default user as fallback
 	
-	// If we can extract a group ID from the conversation ID, try to get participants
-	if groupID, ok := a.extractGroupIDFromConversationID(conversationID); ok {
-		if jid, err := types.ParseJID(groupID); err == nil {
-			if participants, err := a.client.GetGroupInfo(jid); err == nil && len(participants.Participants) > 0 {
-				userIDs := make([]string, len(participants.Participants))
-				for i, p := range participants.Participants {
-					userIDs[i] = p.JID.String()
-				}
-				return userIDs
-			}
+	// Scan memory storage for user IDs with this conversation
+	for key := range a.memoryManager.memories {
+		if key.ConversationID == conversationID {
+			knownUsers[key.UserID] = true
 		}
 	}
 	
-	return result
+	// Scan context storage for user IDs with this conversation
+	for key := range a.memoryManager.context {
+		if key.ConversationID == conversationID {
+			knownUsers[key.UserID] = true
+		}
+	}
+	
+	// Convert to slice
+	userIDs := make([]string, 0, len(knownUsers))
+	for userID := range knownUsers {
+		userIDs = append(userIDs, userID)
+	}
+	
+	// If we still don't have any users (other than default), try to get from WhatsApp but don't fail if it doesn't work
+	if len(userIDs) <= 1 {
+		a.tryAddGroupParticipantsAsUsers(conversationID, knownUsers)
+		
+		// Rebuild the list with any new users
+		userIDs = make([]string, 0, len(knownUsers))
+		for userID := range knownUsers {
+			userIDs = append(userIDs, userID)
+		}
+	}
+	
+	return userIDs
+}
+
+// tryAddGroupParticipantsAsUsers attempts to add group participants as known users, but doesn't fail if it can't
+func (a *WhatsAppAdapter) tryAddGroupParticipantsAsUsers(conversationID string, knownUsers map[string]bool) {
+	// Try to get group info, but don't fail if we can't
+	groupID, ok := a.extractGroupIDFromConversationID(conversationID)
+	if !ok {
+		return
+	}
+	
+	jid, err := types.ParseJID(groupID)
+	if err != nil {
+		return
+	}
+	
+	// Skip if client isn't connected
+	if a.client == nil {
+		return
+	}
+	
+	participants, err := a.client.GetGroupInfo(jid)
+	if err != nil || participants == nil {
+		return
+	}
+	
+	// Add any participants we found
+	for _, p := range participants.Participants {
+		if p.JID.IsEmpty() {
+			continue
+		}
+		knownUsers[p.JID.String()] = true
+	}
 }
 
 // extractGroupIDFromConversationID tries to extract a group JID from a conversation ID
