@@ -2,12 +2,10 @@ version: '3.8'
 
 services:
   chat-bot:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: vibin/chat-bot:latest
     container_name: chat-bot
     ports:
-      - "8080:8080"
+      - "8099:8080"
     volumes:
       - ./config/config.json:/app/config/config.json
       - ./data:/app/data

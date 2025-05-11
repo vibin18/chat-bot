@@ -94,6 +94,134 @@ func (h *AdminHandler) HandleWhatsAppStatus(w http.ResponseWriter, r *http.Reque
 	h.respondWithJSON(w, http.StatusOK, status)
 }
 
+// HandleGetAllMemories returns summary information for all conversations with memories
+func (h *AdminHandler) HandleGetAllMemories(w http.ResponseWriter, r *http.Request) {
+	// Check if connected
+	if !h.adapter.IsConnected() {
+		h.respondWithError(w, http.StatusServiceUnavailable, "WhatsApp is not connected")
+		return
+	}
+	
+	// Get all memory info
+	memoryInfo := h.adapter.GetAllMemoryInfo()
+	h.respondWithJSON(w, http.StatusOK, memoryInfo)
+}
+
+// HandleGetConversationDetails returns detailed memory and context for a specific conversation
+func (h *AdminHandler) HandleGetConversationDetails(w http.ResponseWriter, r *http.Request) {
+	// Check if connected
+	if !h.adapter.IsConnected() {
+		h.respondWithError(w, http.StatusServiceUnavailable, "WhatsApp is not connected")
+		return
+	}
+	
+	// Get conversation ID from query parameter
+	conversationID := r.URL.Query().Get("id")
+	if conversationID == "" {
+		h.respondWithError(w, http.StatusBadRequest, "Missing conversation ID")
+		return
+	}
+	
+	// Get conversation details
+	details := h.adapter.GetConversationDetails(conversationID)
+	if details == nil {
+		h.respondWithError(w, http.StatusNotFound, "Conversation not found")
+		return
+	}
+	
+	h.respondWithJSON(w, http.StatusOK, details)
+}
+
+// HandleDeleteMemory deletes a specific memory from a conversation
+func (h *AdminHandler) HandleDeleteMemory(w http.ResponseWriter, r *http.Request) {
+	// Check if connected
+	if !h.adapter.IsConnected() {
+		h.respondWithError(w, http.StatusServiceUnavailable, "WhatsApp is not connected")
+		return
+	}
+	
+	// Parse request
+	var requestData struct {
+		ConversationID string `json:"conversation_id"`
+		MemoryIndex    int    `json:"memory_index"`
+	}
+	
+	err := json.NewDecoder(r.Body).Decode(&requestData)
+	if err != nil {
+		h.respondWithError(w, http.StatusBadRequest, "Invalid request payload")
+		return
+	}
+	
+	// Delete memory
+	success := h.adapter.DeleteMemory(requestData.ConversationID, requestData.MemoryIndex)
+	if !success {
+		h.respondWithError(w, http.StatusNotFound, "Memory not found")
+		return
+	}
+	
+	h.respondWithJSON(w, http.StatusOK, map[string]string{"message": "Memory deleted successfully"})
+}
+
+// HandleClearAllMemories clears all memories for a conversation
+func (h *AdminHandler) HandleClearAllMemories(w http.ResponseWriter, r *http.Request) {
+	// Check if connected
+	if !h.adapter.IsConnected() {
+		h.respondWithError(w, http.StatusServiceUnavailable, "WhatsApp is not connected")
+		return
+	}
+	
+	// Parse request
+	var requestData struct {
+		ConversationID string `json:"conversation_id"`
+	}
+	
+	err := json.NewDecoder(r.Body).Decode(&requestData)
+	if err != nil {
+		h.respondWithError(w, http.StatusBadRequest, "Invalid request payload")
+		return
+	}
+	
+	// Clear all memories
+	success := h.adapter.ClearAllMemories(requestData.ConversationID)
+	if !success {
+		h.respondWithError(w, http.StatusNotFound, "Conversation not found")
+		return
+	}
+	
+	h.respondWithJSON(w, http.StatusOK, map[string]string{"message": "All memories cleared successfully"})
+}
+
+// HandleUpdateMemory updates the content of a specific memory
+func (h *AdminHandler) HandleUpdateMemory(w http.ResponseWriter, r *http.Request) {
+	// Check if connected
+	if !h.adapter.IsConnected() {
+		h.respondWithError(w, http.StatusServiceUnavailable, "WhatsApp is not connected")
+		return
+	}
+	
+	// Parse request
+	var requestData struct {
+		ConversationID string `json:"conversation_id"`
+		MemoryIndex    int    `json:"memory_index"`
+		Content        string `json:"content"`
+	}
+	
+	err := json.NewDecoder(r.Body).Decode(&requestData)
+	if err != nil {
+		h.respondWithError(w, http.StatusBadRequest, "Invalid request payload")
+		return
+	}
+	
+	// Update memory
+	success := h.adapter.UpdateMemory(requestData.ConversationID, requestData.MemoryIndex, requestData.Content)
+	if !success {
+		h.respondWithError(w, http.StatusNotFound, "Memory not found")
+		return
+	}
+	
+	h.respondWithJSON(w, http.StatusOK, map[string]string{"message": "Memory updated successfully"})
+}
+
 // respondWithError sends an error response
 func (h *AdminHandler) respondWithError(w http.ResponseWriter, code int, message string) {
 	h.respondWithJSON(w, code, map[string]string{"error": message})

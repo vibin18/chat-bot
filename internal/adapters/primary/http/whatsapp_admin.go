@@ -20,12 +20,26 @@ func (h *Handler) setupWhatsAppAdminRoutes(r chi.Router) {
 		
 		// Status endpoint
 		r.Get("/status", h.handleWhatsAppStatus)
+		
+		// Memory management endpoints
+		r.Route("/memory", func(r chi.Router) {
+			r.Get("/all", h.handleGetAllMemories)
+			r.Get("/conversation", h.handleGetConversationMemory)
+			r.Post("/delete", h.handleDeleteMemory)
+			r.Post("/clear", h.handleClearAllMemories)
+			r.Post("/update", h.handleUpdateMemory)
+		})
 	})
 }
 
 // WhatsAppAdminPage serves the WhatsApp admin UI
 func (h *Handler) WhatsAppAdminPage(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, "./web/templates/whatsapp_admin.html")
+}
+
+// MemoryAdminPage serves the Memory admin UI
+func (h *Handler) MemoryAdminPage(w http.ResponseWriter, r *http.Request) {
+	http.ServeFile(w, r, "./web/templates/memory_admin.html")
 }
 
 // handleGetGroups returns a list of WhatsApp groups

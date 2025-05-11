@@ -4,7 +4,7 @@
 FROM golang:1.24.2-alpine AS builder
 
 # Install git and certificates for dependency fetching
-RUN apk add --no-cache git ca-certificates tzdata curl && update-ca-certificates
+RUN apk add --no-cache git ca-certificates tzdata curl gcc build-base && update-ca-certificates
 
 # Create appuser
 ENV USER=appuser
@@ -23,6 +23,7 @@ ENV GO111MODULE=on \
     CGO_ENABLED=0 \
     GOOS=linux \
     GOARCH=amd64
+
 
 # Set working directory
 WORKDIR /app

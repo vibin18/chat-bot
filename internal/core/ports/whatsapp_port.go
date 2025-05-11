@@ -10,6 +10,32 @@ type GroupInfo struct {
 	IsAllowed   bool   `json:"is_allowed"`
 }
 
+// MemoryInfo provides a summary of memories for the admin UI
+type MemoryInfo struct {
+	ConversationID string    `json:"conversation_id"`
+	GroupName      string    `json:"group_name"`
+	MemoryCount    int       `json:"memory_count"`
+	ContextCount   int       `json:"context_count"`
+	LastActivity   string    `json:"last_activity"`
+}
+
+// Memory represents a stored piece of information about a conversation
+type Memory struct {
+	Content     string    `json:"content"`
+	CreatedAt   string    `json:"created_at"`
+	LastUsed    string    `json:"last_used"`
+	UseCount    int       `json:"use_count"`
+}
+
+// ConversationDetails provides memory and context details for a conversation
+type ConversationDetails struct {
+	ConversationID string    `json:"conversation_id"`
+	GroupName      string    `json:"group_name"`
+	Memories       []Memory  `json:"memories"`
+	Context        []string  `json:"context"`
+	LastActivity   string    `json:"last_activity"`
+}
+
 // WhatsAppPort is the interface for WhatsApp integration
 type WhatsAppPort interface {
 	// Connect establishes the connection to WhatsApp
@@ -29,4 +55,19 @@ type WhatsAppPort interface {
 	
 	// UpdateAllowedGroups updates the allowed groups configuration
 	UpdateAllowedGroups(groups []string) error
+	
+	// GetAllMemoryInfo returns summary info for all conversations with memories
+	GetAllMemoryInfo() []MemoryInfo
+	
+	// GetConversationDetails returns detailed memory and context for a specific conversation
+	GetConversationDetails(conversationID string) *ConversationDetails
+	
+	// DeleteMemory deletes a specific memory from a conversation
+	DeleteMemory(conversationID string, memoryIndex int) bool
+	
+	// ClearAllMemories clears all memories for a conversation
+	ClearAllMemories(conversationID string) bool
+	
+	// UpdateMemory updates the content of a specific memory
+	UpdateMemory(conversationID string, memoryIndex int, newContent string) bool
 }
