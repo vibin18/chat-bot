@@ -1,8 +1,12 @@
 package llm
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"regexp"
 	"strings"
 	"time"
@@ -23,15 +27,14 @@ type OllamaAdapter struct {
 
 // NewOllamaAdapter creates a new OllamaAdapter
 func NewOllamaAdapter(config *config.LLMConfig, log logger.Logger) (*OllamaAdapter, error) {
-	log.Info("Initializing Ollama adapter", "endpoint", config.Ollama.Endpoint, "model", config.Ollama.Model)
+	log.Info("Creating Ollama adapter", "endpoint", config.Ollama.Endpoint, "model", config.Ollama.Model)
 	
+	// Create Ollama client with the proper server URL
 	client, err := ollama.New(
 		ollama.WithServerURL(config.Ollama.Endpoint),
-		ollama.WithModel(config.Ollama.Model),
 	)
-	
 	if err != nil {
-		log.Error("Failed to initialize Ollama client", "error", err)
+		log.Error("Failed to create Ollama client", "error", err)
 		return nil, err
 	}
 	
@@ -57,6 +60,14 @@ func (a *OllamaAdapter) GenerateResponse(ctx context.Context, messages []domain.
 	model := a.config.Ollama.Model
 	a.logger.Info("Generating response with Ollama", "model", model)
 	
+	// Special handling for image analysis requests
+	for _, msg := range messages {
+		if msg.Type == domain.MessageTypeImageAnalysis && len(msg.Images) > 0 {
+			return a.generateImageAnalysis(ctx, msg)
+		}
+	}
+	
+	// For regular text messages, use the LangChain client
 	// Convert domain messages to LangChain messages
 	prompt := formatMessagesAsPrompt(messages, model, a.config.EnableReasoning)
 	
@@ -86,6 +97,128 @@ func (a *OllamaAdapter) GenerateResponse(ctx context.Context, messages []domain.
 	return result, nil
 }
 
+// generateImageAnalysis handles image analysis requests by making direct API calls to Ollama
+func (a *OllamaAdapter) generateImageAnalysis(ctx context.Context, message domain.Message) (string, error) {
+	a.logger.Info("Processing image analysis using direct API call", "image_size", len(message.Images[0]))
+	
+	// Create a clear prompt for image analysis
+	prompt := "Describe in detail what you see in this image. Include information about objects, people, scenes, colors, and text visible in the image."
+	
+	// If the user provided a custom prompt, use it
+	if message.Content != "" && message.Content != "Analyze the following image and provide a detailed description." {
+		prompt = message.Content
+	}
+	
+	// Create the request payload following Ollama's API format
+	type ollamaMessage struct {
+		Role    string   `json:"role"`
+		Content string   `json:"content"`
+		Images  []string `json:"images,omitempty"`
+	}
+	
+	type ollamaRequest struct {
+		Model    string          `json:"model"`
+		Messages []ollamaMessage `json:"messages"`
+		Stream   bool            `json:"stream"`
+	}
+	
+	// Create the request
+	request := ollamaRequest{
+		Model: a.config.Ollama.Model,
+		Messages: []ollamaMessage{
+			{
+				Role:    "user",
+				Content: prompt,
+				Images:  []string{message.Images[0]},
+			},
+		},
+		Stream: false,
+	}
+	
+	// Marshal the request to JSON
+	requestJSON, err := json.Marshal(request)
+	if err != nil {
+		a.logger.Error("Failed to marshal request", "error", err)
+		return "", fmt.Errorf("failed to marshal request: %w", err)
+	}
+	
+	// Create a timeout context
+	timeoutCtx, cancel := context.WithTimeout(ctx, time.Duration(a.config.Ollama.TimeoutSeconds)*time.Second)
+	defer cancel()
+	
+	// Create the HTTP request
+	url := fmt.Sprintf("%s/api/chat", a.config.Ollama.Endpoint)
+	httpReq, err := http.NewRequestWithContext(timeoutCtx, "POST", url, bytes.NewBuffer(requestJSON))
+	if err != nil {
+		a.logger.Error("Failed to create HTTP request", "error", err)
+		return "", fmt.Errorf("failed to create HTTP request: %w", err)
+	}
+	
+	// Set headers
+	httpReq.Header.Set("Content-Type", "application/json")
+	
+	// Send the request
+	a.logger.Info("Sending image analysis request to Ollama", "url", url)
+	client := &http.Client{}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		a.logger.Error("Failed to send request", "error", err)
+		return "", fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+	
+	// Read the response
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		a.logger.Error("Failed to read response", "error", err)
+		return "", fmt.Errorf("failed to read response: %w", err)
+	}
+	
+	// Check if the response is successful
+	if resp.StatusCode != http.StatusOK {
+		a.logger.Error("Received error response", "status", resp.Status, "body", string(body))
+		return "", fmt.Errorf("received error response: %s", resp.Status)
+	}
+	
+	a.logger.Info("Received image analysis response", "status", resp.Status, "length", len(body))
+	
+	// Parse the response
+	type ollamaResponse struct {
+		Model     string         `json:"model"`
+		CreatedAt string         `json:"created_at"`
+		Message   *ollamaMessage `json:"message,omitempty"`
+		Response  string         `json:"response,omitempty"`
+	}
+	
+	var responseObj ollamaResponse
+	if err := json.Unmarshal(body, &responseObj); err != nil {
+		a.logger.Warn("Failed to parse response JSON", "error", err)
+		// Return the raw response if parsing fails
+		return string(body), nil
+	}
+	
+	// Extract the content
+	var result string
+	if responseObj.Response != "" {
+		// Newer Ollama API format with Response field
+		result = responseObj.Response
+		a.logger.Info("Extracted response from 'response' field")
+	} else if responseObj.Message != nil && responseObj.Message.Content != "" {
+		// Older Ollama API format with Message.Content field
+		result = responseObj.Message.Content
+		a.logger.Info("Extracted response from 'message.content' field")
+	} else {
+		// Fallback to the raw response
+		a.logger.Warn("Could not extract structured content from response")
+		result = string(body)
+	}
+	
+	// Remove any references to base64 encoding
+	result = removeBase64References(result)
+	
+	return result, nil
+}
+
 // GetModelInfo returns information about the current LLM model
 func (a *OllamaAdapter) GetModelInfo(ctx context.Context) (map[string]interface{}, error) {
 	a.logger.Info("Getting model info for Ollama", "model", a.config.Ollama.Model)
@@ -99,6 +232,39 @@ func (a *OllamaAdapter) GetModelInfo(ctx context.Context) (map[string]interface{
 		"maxTokens":       a.config.Ollama.MaxTokens,
 		"enableReasoning": a.config.EnableReasoning,
 	}, nil
+}
+
+// removeBase64References removes references to base64 encoding from the response
+func removeBase64References(text string) string {
+	// Define patterns to remove
+	patterns := []string{
+		"This is a base64 encoded image",
+		"base64 encoded image",
+		"base64 encoding",
+		"based on the base64 image",
+		"I can see a base64 encoded image",
+		"Decoding it reveals",
+		"decoding the image",
+		"encoded in base64",
+		"The image appears to be",
+	}
+	
+	// Remove each pattern
+	result := text
+	for _, pattern := range patterns {
+		result = strings.ReplaceAll(result, pattern, "")
+	}
+	
+	// Clean up any double spaces created from removals
+	spaceRegex := regexp.MustCompile(`\s+`)
+	result = spaceRegex.ReplaceAllString(result, " ")
+	
+	// Clean up the start by removing any leading space and periods
+	result = strings.TrimSpace(result)
+	result = strings.TrimPrefix(result, ".")
+	result = strings.TrimSpace(result)
+	
+	return result
 }
 
 // formatMessagesAsPrompt converts a slice of domain messages to a prompt string for Ollama
