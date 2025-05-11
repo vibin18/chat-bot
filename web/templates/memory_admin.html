@@ -508,6 +508,10 @@
             document.getElementById('user-context-section').classList.remove('d-none');
             document.querySelector('.select-prompt').style.display = 'none';
             
+            // Force the display style (in case classList.remove isn't working)
+            document.getElementById('user-memories-section').style.display = 'block';
+            document.getElementById('user-context-section').style.display = 'block';
+            
             // Clear containers before loading
             document.getElementById('user-memories').innerHTML = '<p>Loading memories...</p>';
             document.getElementById('user-context-container').innerHTML = '<p>Loading context messages...</p>';
