@@ -102,12 +102,23 @@ func (a *OllamaAdapter) GenerateResponse(ctx context.Context, messages []domain.
 func (a *OllamaAdapter) generateImageAnalysis(ctx context.Context, message domain.Message) (string, error) {
 	a.logger.Info("Processing image analysis using direct API call", "image_size", len(message.Images[0]))
 	
-	// Create a clear prompt for image analysis
-	prompt := "Describe in detail what you see in this image. Include information about objects, people, scenes, colors, and text visible in the image."
+	// Create a clear prompt for image analysis with formatting instructions for WhatsApp
+	prompt := `Analyze this image in detail and format your response as follows:
+
+1. Start with a "📷 IMAGE ANALYSIS" heading
+2. Provide a "📝 SUMMARY" section with a brief 1-2 sentence overview
+3. Include a "🔍 DETAILS" section with paragraphs about:
+   - 👥 People/subjects (if any)
+   - 🏞️ Scene/setting
+   - 🎨 Colors and visual elements
+   - 📜 Text content (if any)
+4. End with a "💡 CONTEXT" section if relevant
+
+Use emoji bullet points, clear headings, and short paragraphs for better readability in WhatsApp.`
 	
-	// If the user provided a custom prompt, use it
+	// If the user provided a custom prompt, append it to our formatting instructions
 	if message.Content != "" && message.Content != "Analyze the following image and provide a detailed description." {
-		prompt = message.Content
+		prompt = message.Content + "\n\n" + prompt
 	}
 	
 	// Create the request payload following Ollama's API format
@@ -123,10 +134,14 @@ func (a *OllamaAdapter) generateImageAnalysis(ctx context.Context, message domai
 		Stream   bool            `json:"stream"`
 	}
 	
-	// Create the request
+	// Create the request with system message and user message
 	request := ollamaRequest{
 		Model: a.config.Ollama.Model,
 		Messages: []ollamaMessage{
+			{
+				Role:    "system",
+				Content: "You are an expert image analyst that provides detailed, well-formatted descriptions. Create visually appealing responses with emojis, headings, and clear sections. Format your response for WhatsApp with good spacing, clear structure, and concise paragraphs.",
+			},
 			{
 				Role:    "user",
 				Content: prompt,
