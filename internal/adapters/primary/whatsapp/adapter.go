@@ -263,6 +263,8 @@ func (a *WhatsAppAdapter) handleMessage(evt *events.Message) {
 
 // processAndReply processes a message and sends a reply
 func (a *WhatsAppAdapter) processAndReply(conversationID string, message string, evt *events.Message, isReplyToBot bool) {
+	// Extract user ID from the message event
+	userID := evt.Info.Sender.String()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
@@ -270,7 +272,7 @@ func (a *WhatsAppAdapter) processAndReply(conversationID string, message string,
 	a.recordMessage(conversationID, fmt.Sprintf("User: %s", message))
 
 	// Always add to context for this conversation
-	a.memoryManager.AddContextMessage(conversationID, fmt.Sprintf("User: %s", message))
+	a.memoryManager.AddContextMessage(userID, conversationID, fmt.Sprintf("User: %s", message))
 	
 	// Check if we have a predefined response for this message
 	if predefinedResponse, found := a.responses.CheckForPredefinedResponse(message); found {
@@ -280,7 +282,7 @@ func (a *WhatsAppAdapter) processAndReply(conversationID string, message string,
 		a.recordMessage(conversationID, fmt.Sprintf("Bot: %s", predefinedResponse))
 		
 		// Also add to context
-		a.memoryManager.AddContextMessage(conversationID, fmt.Sprintf("Bot: %s", predefinedResponse))
+		a.memoryManager.AddContextMessage(userID, conversationID, fmt.Sprintf("Bot: %s", predefinedResponse))
 		
 		// Send the predefined response
 		a.sendReply(predefinedResponse, evt)
@@ -303,8 +305,8 @@ func (a *WhatsAppAdapter) processAndReply(conversationID string, message string,
 	enhancedMessage := message
 	if isReplyToBot {
 		// Get context and memories for this conversation
-		context := a.memoryManager.GetContext(conversationID)
-		memories := a.memoryManager.GetMemories(conversationID)
+		context := a.memoryManager.GetContext(userID, conversationID)
+		memories := a.memoryManager.GetMemories(userID, conversationID)
 		
 		// Build enhanced message with context and memories
 		var contextStr strings.Builder
@@ -361,10 +363,10 @@ func (a *WhatsAppAdapter) processAndReply(conversationID string, message string,
 	a.recordMessage(conversationID, fmt.Sprintf("Bot: %s", response))
 	
 	// Also add to context
-	a.memoryManager.AddContextMessage(conversationID, fmt.Sprintf("Bot: %s", response))
+	a.memoryManager.AddContextMessage(userID, conversationID, fmt.Sprintf("Bot: %s", response))
 	
 	// Extract potential memories from this exchange
-	a.memoryManager.ExtractMemories(conversationID, message, response)
+	a.memoryManager.ExtractMemories(userID, conversationID, message, response)
 	
 	// Send the response
 	a.sendReply(response, evt)
