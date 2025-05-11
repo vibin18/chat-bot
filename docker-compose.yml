@@ -5,7 +5,7 @@ services:
     image: vibin/chat-bot:latest
     container_name: chat-bot
     ports:
-      - "8099:8080"
+      - "8099:8099"
     volumes:
       - ./config/config.json:/app/config/config.json
       - /root/chatbot-data:/app/data

@@ -647,18 +647,6 @@
             });
             */
         }
-                    if (data.message) {
-                        bootstrap.Modal.getInstance(document.getElementById('edit-memory-modal')).hide();
-                        loadConversationDetails(currentConversationId);
-                    } else if (data.error) {
-                        alert('Error: ' + data.error);
-                    }
-                })
-                .catch(error => {
-                    console.error('Error updating memory:', error);
-                    alert('Error updating memory. Please try again.');
-                });
-        }
         
         // Delete memory (legacy function, should be removed in production)
         function deleteMemory(index) {
@@ -669,6 +657,10 @@
         
         // Clear all memories (legacy function, should be removed in production)
         function clearAllMemories() {
+            // This is a legacy function that would be removed in production
+            // We're keeping it here for backwards compatibility
+            clearUserMemories();
+        }
     </script>
 </body>
 </html>
