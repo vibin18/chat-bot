@@ -93,6 +93,9 @@ type WhatsAppPort interface {
 	// ClearAllMemories clears all memories for a conversation
 	ClearAllMemories(conversationID string) bool
 	
+	// DeleteContextMessage deletes a specific context message for a user in a conversation
+	DeleteContextMessage(conversationID, userID string, index int) bool
+	
 	// UpdateMemory updates the content of a specific memory
 	UpdateMemory(conversationID string, memoryIndex int, newContent string) bool
 }
