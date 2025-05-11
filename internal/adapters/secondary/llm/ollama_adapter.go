@@ -106,29 +106,39 @@ func formatMessagesAsPrompt(messages []domain.Message, model string, enableReaso
 	// Special handling for image analysis
 	for _, msg := range messages {
 		if msg.Type == domain.MessageTypeImageAnalysis && len(msg.Images) > 0 {
-			// Format the prompt to get more detailed analysis and avoid base64 text response
-			enhancedPrompt := "Analyze this image in detail. Provide a comprehensive description of what you see, including objects, people, scenes, colors, text, and any other important elements. DO NOT mention that this is a base64 image or refer to the image encoding."
+			// Enhanced prompt for detailed image analysis
+			analysisPrompt := "Describe in detail what you see in this image. Include information about objects, people, scenes, colors, text, and any other important elements."
 			
-			// If user provided content, append it to our enhanced prompt
+			// If user provided specific content, use it instead of our default prompt
 			if msg.Content != "" && msg.Content != "Describe what is in this image in detail." {
-				enhancedPrompt += " " + msg.Content
+				analysisPrompt = msg.Content
 			}
 			
-			// For image analysis with Ollama, we need to use API format directly
-			// with option "stream": false to get complete response
+			// Format exactly as the Ollama API docs for image analysis
+			// This is the correct format with a messages array and images inside the content
 			jsonPayload := fmt.Sprintf(`{
 `+
 				`  "model": "%s",
 `+
-				`  "prompt": "%s",
+				`  "messages": [
 `+
-				`  "stream": false,
+				`    {
 `+
-				`  "images": ["%s"]
+				`      "role": "user",
 `+
-				`}`, 
-				model, 
-				escape(enhancedPrompt), 
+				`      "content": "%s",
+`+
+				`      "images": ["%s"]
+`+
+				`    }
+`+
+				`  ],
+`+
+				`  "stream": false
+`+
+				`}`,
+				model,
+				escape(analysisPrompt),
 				escape(msg.Images[0]),
 			)
 			return jsonPayload

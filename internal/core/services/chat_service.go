@@ -131,13 +131,17 @@ func (s *ChatService) GetModelName() string {
 
 // OllamaImageResponse represents the JSON response structure for Ollama image analysis
 type OllamaImageResponse struct {
-	Model     string `json:"model"`
-	CreatedAt string `json:"created_at"`
-	Message   struct {
-		Role    string `json:"role"`
-		Content string `json:"content"`
-	} `json:"message"`
-	Done bool `json:"done"`
+	Model       string `json:"model"`
+	CreatedAt   string `json:"created_at"`
+	Message     *OllamaMessage `json:"message,omitempty"`
+	Response    string `json:"response,omitempty"` // For newer Ollama API versions
+	Done        bool   `json:"done"`
+}
+
+// OllamaMessage represents a message in the Ollama response
+type OllamaMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
 }
 
 // CompletionWithImageAnalysis performs image analysis using the dedicated image LLM
@@ -190,20 +194,39 @@ func (s *ChatService) CompletionWithImageAnalysis(ctx context.Context, message d
 	}
 	
 	// Try to parse the response as JSON first (Ollama may return JSON)
-	s.logger.Info("Raw image analysis response received", "length", len(rawResponse))
+	// Log response details with safety check for substring
+	logPreview := rawResponse
+	if len(rawResponse) > 50 {
+		logPreview = rawResponse[:50]
+	}
+	s.logger.Info("Raw image analysis response received", "length", len(rawResponse), "starts_with", logPreview)
 	
 	// Post-process the response to remove any references to base64 encoded images
 	cleanedResponse := rawResponse
 	
 	// Check if this looks like JSON
 	if strings.HasPrefix(strings.TrimSpace(rawResponse), "{") {
+		s.logger.Info("Detected JSON response, attempting to parse")
 		var ollamaResp OllamaImageResponse
+		
 		if err := json.Unmarshal([]byte(rawResponse), &ollamaResp); err == nil {
-			// Successfully parsed JSON response
-			if ollamaResp.Message.Content != "" {
+			s.logger.Info("Successfully parsed JSON structure", "done", ollamaResp.Done)
+			
+			// Check different Ollama API response formats
+			if ollamaResp.Response != "" {
+				// Newer Ollama API format with direct response field
+				cleanedResponse = ollamaResp.Response
+				s.logger.Info("Extracted from Response field", "content_length", len(cleanedResponse))
+			} else if ollamaResp.Message != nil && ollamaResp.Message.Content != "" {
+				// Older Ollama API format with Message.Content field
 				cleanedResponse = ollamaResp.Message.Content
-				s.logger.Info("Extracted content from JSON response", "json_length", len(rawResponse), "content_length", len(cleanedResponse))
+				s.logger.Info("Extracted from Message.Content field", "content_length", len(cleanedResponse))
+			} else {
+				// No structured content found, use raw response
+				s.logger.Warn("Could not find structured content in response, using raw response")
 			}
+		} else {
+			s.logger.Warn("Failed to parse JSON response", "error", err)
 		}
 	}
 	
