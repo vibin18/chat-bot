@@ -21,6 +21,9 @@ func (h *Handler) setupWhatsAppAdminRoutes(r chi.Router) {
 		// Status endpoint
 		r.Get("/status", h.handleWhatsAppStatus)
 		
+		// Bot messaging
+		r.Post("/send", h.handleSendBotMessage)
+		
 		// Memory management endpoints
 		r.Route("/memory", func(r chi.Router) {
 			r.Get("/all", h.handleGetAllMemories)

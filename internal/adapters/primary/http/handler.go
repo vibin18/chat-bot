@@ -89,6 +89,7 @@ func (h *Handler) setupRouter() {
 	if h.config.WhatsApp.Enabled {
 		r.Get("/admin/whatsapp", h.WhatsAppAdminPage)
 		r.Get("/admin/memory", h.MemoryAdminPage)
+		r.Get("/admin/bot", h.BotAdminPage)
 	}
 	
 	h.router = r

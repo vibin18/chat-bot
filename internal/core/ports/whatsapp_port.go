@@ -101,4 +101,7 @@ type WhatsAppPort interface {
 	
 	// AddMemory adds a new memory for a user in a conversation
 	AddMemory(conversationID string, userID string, content string) bool
+	
+	// SendGroupMessage sends a message to a WhatsApp group on behalf of the bot
+	SendGroupMessage(groupID string, message string) error
 }
