@@ -196,8 +196,17 @@
         <!-- Two-Pane View -->
         <div id="two-pane-view" class="row">
             <!-- Users Sidebar -->
-            <div id="users-sidebar" class="col-md-4">
-                <!-- User items will be populated here -->
+            <div class="col-md-4">
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h5 class="mb-0" id="users-sidebar-title">Users</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="users-sidebar">
+                            <!-- User items will be populated here -->
+                        </div>
+                    </div>
+                </div>
             </div>
             
             <!-- Memory Container -->
@@ -317,9 +326,7 @@
             // Load groups with memories
             loadGroups();
             
-            // Set up event listeners
-            document.getElementById('back-to-groups').addEventListener('click', showGroupSelector);
-            document.getElementById('clear-user-memories').addEventListener('click', clearUserMemories);
+            // Set up event listener for save memory button
             document.getElementById('save-memory-edit').addEventListener('click', saveMemoryEdit);
         });
         
@@ -418,7 +425,8 @@
             // Update UI to show group name
             document.querySelector('.group-selector').style.display = 'none';
             document.getElementById('two-pane-view').style.display = 'flex';
-            document.getElementById('selected-group-name').textContent = groupName;
+            // Add a title to the sidebar
+            document.getElementById('users-sidebar-title').textContent = `Users in ${groupName}`;
             
             // Load users in the conversation
             fetch(`/api/whatsapp/memory/users?conversation_id=${groupId}`)
