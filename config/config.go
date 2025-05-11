@@ -12,6 +12,7 @@ type Config struct {
 	LLM          LLMConfig          `json:"llm"`
 	WebSearch    WebSearchConfig    `json:"websearch"`
 	SecondaryLLM SecondaryLLMConfig `json:"secondary_llm"`
+	ImageLLM     ImageLLMConfig     `json:"image_llm"`
 	WhatsApp     WhatsAppConfig     `json:"whatsapp"`
 }
 
@@ -49,7 +50,14 @@ type WebSearchConfig struct {
 
 // SecondaryLLMConfig holds configuration for the secondary LLM
 type SecondaryLLMConfig struct {
-	Provider string       `json:"provider"`
+	Provider string      `json:"provider"`
+	Ollama   OllamaConfig `json:"ollama"`
+}
+
+// ImageLLMConfig holds configuration for the image analysis LLM
+type ImageLLMConfig struct {
+	Enabled  bool        `json:"enabled"`
+	Provider string      `json:"provider"`
 	Ollama   OllamaConfig `json:"ollama"`
 }
 
@@ -131,6 +139,17 @@ func DefaultConfig() *Config {
 				Model:          "gemma3:1b",
 				MaxTokens:      256,
 				TimeoutSeconds: 30,
+			},
+		},
+		ImageLLM: ImageLLMConfig{
+			Enabled:  true,
+			Provider: "ollama",
+			Ollama: OllamaConfig{
+				Enabled:        true,
+				Endpoint:       "http://localhost:11434",
+				Model:          "llava:7b",  // Default vision model
+				MaxTokens:      1024,
+				TimeoutSeconds: 60,
 			},
 		},
 		WhatsApp: WhatsAppConfig{

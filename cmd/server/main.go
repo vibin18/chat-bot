@@ -61,6 +61,28 @@ func main() {
 		log.Error("Failed to initialize main LLM adapter", "error", err)
 		os.Exit(1)
 	}
+	
+	// Create image analysis LLM adapter if enabled
+	var imageLLMAdapter ports.LLMPort
+	if cfg.ImageLLM.Enabled {
+		log.Info("Initializing image analysis LLM adapter", "provider", cfg.ImageLLM.Provider, "model", cfg.ImageLLM.Ollama.Model)
+		// Create a temporary LLMConfig from ImageLLM for adapter initialization
+		imageLLMConfig := &config.LLMConfig{
+			Provider: cfg.ImageLLM.Provider,
+			Ollama:   cfg.ImageLLM.Ollama,
+		}
+		imageAdapter, err := llm.NewOllamaAdapter(imageLLMConfig, log)
+		if err != nil {
+			log.Error("Failed to initialize image analysis LLM adapter", "error", err)
+			// Fall back to main LLM if image LLM fails
+			imageLLMAdapter = llmAdapter
+		} else {
+			imageLLMAdapter = imageAdapter
+		}
+	} else {
+		// Use main LLM adapter for image analysis if dedicated one is disabled
+		imageLLMAdapter = llmAdapter
+	}
 
 	// Create repository adapter
 	repoAdapter := repository.NewInMemoryRepository(log)
@@ -98,8 +120,8 @@ func main() {
 		}
 	}
 
-	// Create chat service
-	chatService := services.NewChatService(llmAdapter, repoAdapter, webSearchAdapter, cfg, log)
+	// Create chat service with dedicated image LLM adapter
+	chatService := services.NewChatService(llmAdapter, imageLLMAdapter, repoAdapter, webSearchAdapter, cfg, log)
 
 	// Initialize WhatsApp adapter if enabled
 	var waAdapter ports.WhatsAppPort

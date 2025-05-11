@@ -15,6 +15,7 @@ import (
 // ChatService is the core service that implements the business logic for chat interactions
 type ChatService struct {
 	llm        ports.LLMPort
+	imageLLM   ports.LLMPort  // Dedicated LLM for image analysis
 	repository ports.ChatRepositoryPort
 	webSearch  ports.WebSearchPort
 	logger     logger.Logger
@@ -22,9 +23,10 @@ type ChatService struct {
 }
 
 // NewChatService creates a new ChatService
-func NewChatService(llm ports.LLMPort, repository ports.ChatRepositoryPort, webSearch ports.WebSearchPort, config *config.Config, logger logger.Logger) *ChatService {
+func NewChatService(llm ports.LLMPort, imageLLM ports.LLMPort, repository ports.ChatRepositoryPort, webSearch ports.WebSearchPort, config *config.Config, logger logger.Logger) *ChatService {
 	return &ChatService{
 		llm:        llm,
+		imageLLM:   imageLLM,
 		repository: repository,
 		webSearch:  webSearch,
 		logger:     logger,
@@ -125,12 +127,9 @@ func (s *ChatService) GetModelName() string {
 	return "unknown"
 }
 
-// CompletionWithImageAnalysis performs image analysis using the LLM
+// CompletionWithImageAnalysis performs image analysis using the dedicated image LLM
 func (s *ChatService) CompletionWithImageAnalysis(ctx context.Context, message domain.Message) (string, error) {
 	s.logger.Info("Processing image analysis request", "image_count", len(message.Images))
-	
-	// For now, we'll assume the request is formatted as needed and just pass it to the LLM
-	// In a real implementation, we'd need to add special handling depending on the LLM provider
 	
 	// Update the message content if empty
 	if message.Content == "" {
@@ -147,7 +146,24 @@ func (s *ChatService) CompletionWithImageAnalysis(ctx context.Context, message d
 		message,
 	}
 	
-	response, err := s.llm.GenerateResponse(ctx, messages)
+	// Use the dedicated image LLM if available, otherwise fall back to the main LLM
+	llm := s.imageLLM
+	if llm == nil {
+		s.logger.Warn("Image LLM not available, falling back to main LLM")
+		llm = s.llm
+	}
+	
+	// Use the model name from config for logging
+	var modelName string
+	if s.config.ImageLLM.Enabled {
+		modelName = s.config.ImageLLM.Ollama.Model
+	} else {
+		modelName = s.GetModelName()
+	}
+	s.logger.Info("Using model for image analysis", "model", modelName)
+	
+	// Generate the response using the appropriate LLM
+	response, err := llm.GenerateResponse(ctx, messages)
 	
 	if err != nil {
 		s.logger.Error("Image analysis failed", "error", err)
