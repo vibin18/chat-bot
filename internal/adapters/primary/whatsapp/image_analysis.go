@@ -126,6 +126,7 @@ func (a *WhatsAppAdapter) processAndReplyWithImageAnalysis(conversationID string
 	a.recordMessage(conversationID, prompt)
 	a.recordMessage(conversationID, analysis)
 
-	// Send the analysis back to the WhatsApp group
-	a.sendReply(analysis, evt)
+	// Send the analysis back to the WhatsApp group - using dedicated function for image analysis
+	// that doesn't apply normal message formatting or filtering
+	a.sendImageAnalysisReply(analysis, evt)
 }

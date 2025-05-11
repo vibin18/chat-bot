@@ -242,14 +242,29 @@ func (a *WhatsAppAdapter) handleMessage(evt *events.Message) {
 		"is_reply", isReplyToBot, 
 		"is_mention", isMention)
 
-	// Handle image with analysis if image is present
-	if hasImage && (isMention || isReplyToBot) {
-		a.log.Info("Processing image message", "group", groupJID)
-		go a.processAndReplyWithImageAnalysis(conversationID, evt)
-		return
+	// Higher priority for image processing if the message contains an image
+	if hasImage {
+		// Even without caption text, process images in replies to bot
+		if isReplyToBot {
+			a.log.Info("Processing image message (reply to bot)", "group", groupJID)
+			go a.processAndReplyWithImageAnalysis(conversationID, evt)
+			return
+		}
+		
+		// For images with captions, check if caption has trigger words
+		if hasMessageText && isMention {
+			a.log.Info("Processing image message with trigger word", "group", groupJID, "message", message)
+			go a.processAndReplyWithImageAnalysis(conversationID, evt)
+			return
+		}
+		
+		// For images without captions or trigger words, ignore
+		if !hasMessageText {
+			return
+		}
 	}
-
-	// If no message text (could be just an image without caption), don't proceed
+	
+	// If it's just text without an image, make sure it has text
 	if !hasMessageText {
 		return
 	}
