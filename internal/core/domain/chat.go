@@ -6,10 +6,12 @@ import (
 
 // Message represents a chat message
 type Message struct {
-	ID        string    `json:"id"`
-	Role      string    `json:"role"` // user or assistant
-	Content   string    `json:"content"`
-	CreatedAt time.Time `json:"created_at"`
+	ID        string     `json:"id"`
+	Role      string     `json:"role"` // user or assistant
+	Content   string     `json:"content"`
+	Type      MessageType `json:"type"`
+	Images    []string   `json:"images,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
 }
 
 // Chat represents a conversation between a user and the LLM
@@ -27,6 +29,7 @@ func NewMessage(role, content string) Message {
 		ID:        generateID(),
 		Role:      role,
 		Content:   content,
+		Type:      MessageTypeText, // Default to text message type
 		CreatedAt: time.Now(),
 	}
 }

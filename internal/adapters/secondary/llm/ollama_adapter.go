@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"strings"
 	"time"
@@ -102,6 +103,29 @@ func (a *OllamaAdapter) GetModelInfo(ctx context.Context) (map[string]interface{
 
 // formatMessagesAsPrompt converts a slice of domain messages to a prompt string for Ollama
 func formatMessagesAsPrompt(messages []domain.Message, model string, enableReasoning bool) string {
+	// Special handling for image analysis
+	for _, msg := range messages {
+		if msg.Type == domain.MessageTypeImageAnalysis && len(msg.Images) > 0 {
+			// For image analysis, we need to format this as a JSON payload
+			// that the model will handle based on the Ollama API spec
+			jsonPayload := fmt.Sprintf(`{
+`+
+				`  "model": "%s",
+`+
+				`  "prompt": "%s",
+`+
+				`  "images": ["%s"]
+`+
+				`}`, 
+				model, 
+				escape(msg.Content), 
+				escape(msg.Images[0]),
+			)
+			return jsonPayload
+		}
+	}
+
+	// Regular text-based message handling
 	// Add system instruction for conciseness
 	prompt := "System: You are a helpful assistant. Keep your responses concise and to the point unless the user specifically asks for detailed explanations or descriptions.\n\n"
 	
@@ -122,4 +146,14 @@ func formatMessagesAsPrompt(messages []domain.Message, model string, enableReaso
 	prompt += "Assistant: "
 	
 	return prompt
+}
+
+// escape escapes special characters in strings to make them safe for JSON
+func escape(s string) string {
+	s = strings.ReplaceAll(s, "\\", "\\\\")
+	s = strings.ReplaceAll(s, "\"", "\\\"")
+	s = strings.ReplaceAll(s, "\n", "\\n")
+	s = strings.ReplaceAll(s, "\r", "\\r")
+	s = strings.ReplaceAll(s, "\t", "\\t")
+	return s
 }

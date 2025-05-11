@@ -116,6 +116,47 @@ func (s *ChatService) GetModelInfo(ctx context.Context) (map[string]interface{},
 	return s.llm.GetModelInfo(ctx)
 }
 
+// GetModelName returns the name of the current LLM model
+func (s *ChatService) GetModelName() string {
+	if s.config.LLM.Provider == "ollama" {
+		return s.config.LLM.Ollama.Model
+	}
+	// Default fallback
+	return "unknown"
+}
+
+// CompletionWithImageAnalysis performs image analysis using the LLM
+func (s *ChatService) CompletionWithImageAnalysis(ctx context.Context, message domain.Message) (string, error) {
+	s.logger.Info("Processing image analysis request", "image_count", len(message.Images))
+	
+	// For now, we'll assume the request is formatted as needed and just pass it to the LLM
+	// In a real implementation, we'd need to add special handling depending on the LLM provider
+	
+	// Update the message content if empty
+	if message.Content == "" {
+		message.Content = "Analyze the following image and provide a detailed description."
+	}
+	
+	// Create the message history with a system prompt for image analysis
+	messages := []domain.Message{
+		{
+			Role:    "system",
+			Content: "You are an AI assistant that specializes in analyzing and describing images in detail.",
+			Type:    domain.MessageTypeText,
+		},
+		message,
+	}
+	
+	response, err := s.llm.GenerateResponse(ctx, messages)
+	
+	if err != nil {
+		s.logger.Error("Image analysis failed", "error", err)
+		return "", fmt.Errorf("image analysis failed: %v", err)
+	}
+	
+	return response, nil
+}
+
 // processWebSearchRequest processes a user request that requires web search
 func (s *ChatService) processWebSearchRequest(ctx context.Context, userContent string, chatHistory []domain.Message) (string, error) {
 	// Step 1: Format the search query using the secondary LLM

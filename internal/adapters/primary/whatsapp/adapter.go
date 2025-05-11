@@ -199,41 +199,60 @@ func (a *WhatsAppAdapter) handleMessage(evt *events.Message) {
 		return
 	}
 
-	// Get message content
-	message := a.getMessageText(evt)
-	if message == "" {
-		return
-	}
-
 	// Get the conversation ID
 	conversationID := a.getOrCreateConversation(evt)
 	
 	// Check if this is a reply to our bot's message
 	isReplyToBot := a.isReplyToBot(evt)
+
+	// Get message content
+	message := a.getMessageText(evt)
+	
+	// Check if it's an image message
+	hasImage := a.hasImage(evt)
+
+	// Check if message has a caption with trigger words if it's an image
+	hasMessageText := message != ""
 	
 	// Check if it contains any of the trigger words
 	isMention := false
-	for _, triggerWord := range a.config.TriggerWords {
-		if strings.Contains(strings.ToLower(message), strings.ToLower(triggerWord)) {
-			isMention = true
-			break
+	if hasMessageText {
+		for _, triggerWord := range a.config.TriggerWords {
+			if strings.Contains(strings.ToLower(message), strings.ToLower(triggerWord)) {
+				isMention = true
+				break
+			}
 		}
-	}
-	
-	// Fallback to the deprecated single trigger word if needed
-	if !isMention && a.config.TriggerWord != "" {
-		isMention = strings.Contains(strings.ToLower(message), strings.ToLower(a.config.TriggerWord))
+		
+		// Fallback to the deprecated single trigger word if needed
+		if !isMention && a.config.TriggerWord != "" {
+			isMention = strings.Contains(strings.ToLower(message), strings.ToLower(a.config.TriggerWord))
+		}
 	}
 	
 	if !isMention && !isReplyToBot {
 		return
 	}
 
+	// Log the message
 	a.log.Info("Received WhatsApp message", 
 		"group", groupJID, 
 		"message", message, 
+		"has_image", hasImage, 
 		"is_reply", isReplyToBot, 
 		"is_mention", isMention)
+
+	// Handle image with analysis if image is present
+	if hasImage && (isMention || isReplyToBot) {
+		a.log.Info("Processing image message", "group", groupJID)
+		go a.processAndReplyWithImageAnalysis(conversationID, evt)
+		return
+	}
+
+	// If no message text (could be just an image without caption), don't proceed
+	if !hasMessageText {
+		return
+	}
 
 	// Clean the message by removing the trigger word if present
 	cleanMessage := message
