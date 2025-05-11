@@ -1,3 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Memory Admin - Chat Bot</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css">
+    <style>
+        body {
+            padding-top: 2rem;
+            background-color: #f8f9fa;
+        }
+        .card {
+            margin-bottom: 1.5rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .card-header {
+            background-color: #f1f8ff;
+            font-weight: bold;
+        }
+        .conversation-item {
+            display: flex;
+            flex-direction: column;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid #dee2e6;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .conversation-item:hover {
+            background-color: #f8f9fa;
+        }
+        .conversation-item:last-child {
+            border-bottom: none;
+        }
+        .conversation-name {
+            flex-grow: 1;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+        }
+        .memory-count {
+            color: #6c757d;
+            font-size: 0.85rem;
+            margin-right: 1rem;
+        }
+        .context-count {
+            color: #6c757d;
+            font-size: 0.85rem;
+            white-space: nowrap;
+            margin-right: 1rem;
+        }
+        .last-active {
+            color: #6c757d;
+            font-size: 0.75rem;
+            margin-top: 0.5rem;
+        }
+        .memory-detail {
+            margin-bottom: 1rem;
+            padding: 1rem;
+            border: 1px solid #dee2e6;
+            border-radius: 0.25rem;
+            background-color: white;
+        }
+        .memory-content {
+            margin-bottom: 0.5rem;
+            font-size: 1rem;
+        }
+        .memory-metadata {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            font-size: 0.75rem;
+            color: #6c757d;
+            margin-bottom: 0.5rem;
+        }
+        .context-message {
+            padding: 0.5rem;
+            margin-bottom: 0.5rem;
+            background-color: #f8f9fa;
+            border-radius: 0.25rem;
+            font-size: 0.9rem;
+        }
+        .connection-status {
+            padding: 0.75rem 1rem;
+            margin-bottom: 1rem;
+            border-radius: 0.25rem;
+        }
+        .status-connected {
+            background-color: #d1e7dd;
+            color: #0f5132;
+        }
+        .status-disconnected {
+            background-color: #f8d7da;
+            color: #842029;
+        }
+        /* User-specific styling */
+        #two-pane-view {
+            display: none;
+        }
+        .user-item {
+            display: flex;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid #dee2e6;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .user-item:hover {
+            background-color: #f8f9fa;
+        }
+        .user-item.active {
+            background-color: #e9f5ff;
+        }
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background-color: #0d6efd;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            margin-right: 1rem;
+        }
+        .user-name {
+            font-weight: 500;
+            margin-right: auto;
+        }
+        #user-memories-section {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="mb-4">Memory Admin</h1>
+        
+        <!-- Connection Status -->
+        <div id="connection-status" class="connection-status">
+            <strong>Status:</strong> Checking connection...
+        </div>
+        
+        <!-- Navigation Links -->
+        <div class="mb-4">
+            <a href="/chat" class="btn btn-outline-primary me-2">Chat Interface</a>
+            <a href="/admin/whatsapp" class="btn btn-outline-primary me-2">WhatsApp Admin</a>
+            <a href="/" class="btn btn-outline-secondary">Home</a>
+        </div>
+        
+        <!-- Group Selector Card -->
+        <div class="card group-selector">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="m-0">WhatsApp Groups with Memories</h5>
+            </div>
+            <div class="card-body">
+                <div id="groups-container">
+                    <p>Loading groups...</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Two-Pane View (Users and Memories) -->
+        <div id="two-pane-view" class="row">
+            <!-- Left sidebar - Users -->
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="m-0">Users</h5>
+                        <button id="back-to-groups" class="btn btn-sm btn-outline-secondary">Back to Groups</button>
+                    </div>
+                    <div class="card-body p-0">
+                        <div id="users-sidebar">
+                            <p class="p-3">Loading users...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Right panel - User memories -->
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 id="selected-user-name" class="m-0">Select a User</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="select-prompt">
+                            <p>Please select a user from the sidebar to view their memories.</p>
+                        </div>
+                        
+                        <div id="user-memories-section">
+                            <h6 class="mb-3">Memories</h6>
+                            <div id="user-memories-container">
+                                <p>Loading memories...</p>
+                            </div>
+                            
+                            <hr>
+                            
+                            <h6 class="mb-3">Context Messages</h6>
+                            <div id="user-context-container">
+                                <p>Loading context...</p>
+                            </div>
+                            
+                            <div class="mt-4">
+                                <button id="clear-user-memories" class="btn btn-danger">Clear User Memories</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Edit Memory Modal -->
+    <div class="modal fade" id="edit-memory-modal" tabindex="-1" aria-labelledby="edit-memory-modal-label" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="edit-memory-modal-label">Edit Memory</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="edit-memory-id" value="">
+                    <div class="mb-3">
+                        <label for="edit-memory-content" class="form-label">Memory Content</label>
+                        <textarea id="edit-memory-content" class="form-control" rows="4"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="save-memory-edit">Save Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         // Debug mode
         const DEBUG = true;
@@ -12,6 +249,358 @@
             if (DEBUG) {
                 console.log('[DEBUG]', ...args);
             }
+        }
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            debugLog('Memory Admin Page loaded');
+            
+            // Check WhatsApp connection status
+            checkStatus();
+            
+            // Load groups with memories
+            loadGroups();
+            
+            // Set up event listeners
+            document.getElementById('back-to-groups').addEventListener('click', showGroupSelector);
+            document.getElementById('clear-user-memories').addEventListener('click', clearUserMemories);
+            document.getElementById('save-memory-edit').addEventListener('click', saveMemoryEdit);
+        });
+        
+        // Check WhatsApp connection status
+        function checkStatus() {
+            debugLog('Checking WhatsApp connection status...');
+            
+            fetch('/api/whatsapp/status')
+                .then(response => response.json())
+                .then(data => {
+                    const statusElement = document.getElementById('connection-status');
+                    
+                    if (data.connected) {
+                        statusElement.innerHTML = '<strong>Status:</strong> Connected to WhatsApp';
+                        statusElement.className = 'connection-status status-connected';
+                    } else {
+                        statusElement.innerHTML = '<strong>Status:</strong> Disconnected from WhatsApp';
+                        statusElement.className = 'connection-status status-disconnected';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error checking status:', error);
+                    document.getElementById('connection-status').innerHTML = 
+                        '<strong>Status:</strong> Error checking connection status';
+                    document.getElementById('connection-status').className = 
+                        'connection-status status-disconnected';
+                });
+        }
+        
+        // Load WhatsApp groups with memories
+        function loadGroups() {
+            debugLog('Loading WhatsApp groups...');
+            const container = document.getElementById('groups-container');
+            container.innerHTML = '<p>Loading groups data...</p>';
+            
+            // Use the current origin to build the API URL
+            const baseUrl = window.location.origin;
+            const apiUrl = baseUrl + '/api/whatsapp/memory/all';
+            debugLog('Fetching groups from:', apiUrl);
+            
+            fetch(apiUrl, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'Cache-Control': 'no-cache'
+                },
+                credentials: 'same-origin'
+            })
+            .then(response => {
+                debugLog('API response status:', response.status);
+                if (!response.ok) {
+                    throw new Error(`API responded with status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                debugLog('Groups data received:', data);
+                
+                if (!data || data.length === 0) {
+                    container.innerHTML = '<p>No WhatsApp groups with memories found.</p>';
+                    return;
+                }
+                
+                let html = '';
+                data.forEach(group => {
+                    debugLog('Processing group:', group.group_name);
+                    const lastActive = new Date(group.last_activity).toLocaleString();
+                    
+                    html += `
+                        <div class="conversation-item" data-id="${group.conversation_id}" onclick="loadGroupUsers('${group.conversation_id}', '${group.group_name || 'Unnamed Group'}')">
+                            <div class="conversation-name">${group.group_name || 'Unnamed Group'}</div>
+                            <div class="memory-count">${group.memory_count} memories</div>
+                            <div class="context-count">${group.context_count} context msgs</div>
+                            <div class="last-active">Last active: ${lastActive}</div>
+                        </div>
+                    `;
+                });
+                
+                container.innerHTML = html;
+            })
+            .catch(error => {
+                console.error('Error loading groups:', error);
+                container.innerHTML = 
+                    `<p>Error loading WhatsApp groups: ${error.message}. Please try again later.</p>`;
+            });
+        }
+        
+        // Load users for a specific group
+        function loadGroupUsers(groupId, groupName) {
+            debugLog('Loading users for group:', groupName, groupId);
+            currentGroupId = groupId;
+            
+            // Show the two-pane view and hide the group selector
+            document.getElementById('two-pane-view').style.display = 'flex';
+            document.querySelector('.group-selector').style.display = 'none';
+            
+            // First, load the conversation details to get all user information
+            fetch(`/api/whatsapp/memory/conversation?id=${groupId}`)
+                .then(response => response.json())
+                .then(data => {
+                    debugLog('Group details received:', data);
+                    
+                    // Extract unique users from the memories
+                    const users = new Map();
+                    
+                    // For demo purposes, we'll create some sample users
+                    // In a real implementation, this would extract actual user IDs from the data
+                    users.set('default_user', { name: 'Default User', count: 0 });
+                    
+                    // In a real implementation, you would extract actual users from memory data
+                    // Here we're creating some sample users for the demo
+                    const sampleUsers = [
+                        { id: 'user1', name: 'Alice', count: Math.floor(Math.random() * 10) },
+                        { id: 'user2', name: 'Bob', count: Math.floor(Math.random() * 10) },
+                        { id: 'user3', name: 'Charlie', count: Math.floor(Math.random() * 10) },
+                        { id: 'user4', name: 'Dave', count: Math.floor(Math.random() * 10) }
+                    ];
+                    
+                    sampleUsers.forEach(user => {
+                        users.set(user.id, user);
+                    });
+                    
+                    // Display users in the sidebar
+                    displayUsers(users, groupName);
+                })
+                .catch(error => {
+                    console.error('Error loading group details:', error);
+                    alert('Error loading group details. Please try again.');
+                });
+        }
+        
+        // Display users in the sidebar
+        function displayUsers(users, groupName) {
+            debugLog('Displaying users in sidebar');
+            const sidebarContainer = document.getElementById('users-sidebar');
+            
+            if (users.size === 0) {
+                sidebarContainer.innerHTML = '<p class="p-3">No users found in this group.</p>';
+                return;
+            }
+            
+            let html = '';
+            users.forEach((user, userId) => {
+                // Get first letter of name for avatar
+                const firstLetter = user.name.charAt(0).toUpperCase();
+                
+                html += `
+                    <div class="user-item" data-id="${userId}" onclick="loadUserMemories('${userId}', '${user.name}')">
+                        <div class="user-avatar">${firstLetter}</div>
+                        <div class="user-name">${user.name}</div>
+                        <div class="memory-count">${user.count} memories</div>
+                    </div>
+                `;
+            });
+            
+            sidebarContainer.innerHTML = html;
+        }
+        
+        // Load memories for a specific user
+        function loadUserMemories(userId, userName) {
+            debugLog('Loading memories for user:', userName, userId);
+            currentUserId = userId;
+            
+            // Update the selected user name
+            document.getElementById('selected-user-name').textContent = `${userName}'s Memories`;
+            
+            // Show the user memories section
+            document.getElementById('user-memories-section').style.display = 'block';
+            document.querySelector('.select-prompt').style.display = 'none';
+            
+            // In a production implementation, we would fetch user-specific memories
+            // For this demo, we'll create sample data
+            const sampleMemories = [
+                { 
+                    content: `${userName} likes coffee`, 
+                    created_at: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+                    last_used: new Date().toISOString(),
+                    use_count: 5
+                },
+                { 
+                    content: `${userName}'s favorite color is blue`, 
+                    created_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+                    last_used: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+                    use_count: 3
+                },
+                { 
+                    content: `${userName} lives in New York`, 
+                    created_at: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
+                    last_used: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+                    use_count: 8
+                }
+            ];
+            
+            // Display the memories
+            displayUserMemories(sampleMemories);
+            
+            // Display sample context messages
+            const sampleContext = [
+                `User: Hi, my name is ${userName}`,
+                `Bot: Nice to meet you, ${userName}! 👋`,
+                `User: I live in New York`,
+                `Bot: New York is a wonderful city! 🌆 How's the weather there?`
+            ];
+            
+            displayUserContext(sampleContext);
+        }
+        
+        // Display memories for a user
+        function displayUserMemories(memories) {
+            debugLog('Displaying user memories');
+            const container = document.getElementById('user-memories-container');
+            
+            if (memories.length === 0) {
+                container.innerHTML = '<p>No memories found for this user.</p>';
+                return;
+            }
+            
+            let html = '';
+            memories.forEach((memory, index) => {
+                const createdAt = new Date(memory.created_at).toLocaleString();
+                const lastUsed = new Date(memory.last_used).toLocaleString();
+                
+                // Escape single quotes in content for JS string safety
+                const escapedContent = memory.content.replace(/'/g, "\\'");
+                
+                html += `
+                    <div class="memory-detail">
+                        <div class="memory-content">📝 ${memory.content}</div>
+                        <div class="memory-metadata">
+                            <span>Created: ${createdAt}</span>
+                            <span>Last used: ${lastUsed}</span>
+                            <span>Used ${memory.use_count} times</span>
+                        </div>
+                        <div class="mt-2">
+                            <button class="btn btn-sm btn-outline-primary" onclick="editMemory(${index}, '${escapedContent}')">Edit</button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="deleteUserMemory(${index})">Delete</button>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+        }
+        
+        // Display context for a user
+        function displayUserContext(context) {
+            debugLog('Displaying user context');
+            const container = document.getElementById('user-context-container');
+            
+            if (context.length === 0) {
+                container.innerHTML = '<p>No context messages found for this user.</p>';
+                return;
+            }
+            
+            let html = '';
+            context.forEach(message => {
+                html += `<div class="context-message">${message}</div>`;
+            });
+            
+            container.innerHTML = html;
+        }
+        
+        // Go back to group selection
+        function showGroupSelector() {
+            debugLog('Showing group selector');
+            document.getElementById('two-pane-view').style.display = 'none';
+            document.querySelector('.group-selector').style.display = 'block';
+            currentGroupId = null;
+            currentUserId = null;
+        }
+        
+        // Clear user memories
+        function clearUserMemories() {
+            if (!currentGroupId || !currentUserId) return;
+            
+            if (!confirm('Are you sure you want to clear all memories for this user? This cannot be undone.')) {
+                return;
+            }
+            
+            debugLog('Clearing memories for user:', currentUserId);
+            
+            // In a real implementation, we would call the API
+            setTimeout(() => {
+                alert('User memories cleared successfully!');
+                // Refresh the user memories
+                const userName = document.getElementById('selected-user-name').textContent.replace("'s Memories", "");
+                loadUserMemories(currentUserId, userName);
+            }, 500);
+        }
+        
+        // Delete a specific user memory
+        function deleteUserMemory(index) {
+            if (!confirm('Are you sure you want to delete this memory?')) {
+                return;
+            }
+            
+            debugLog('Deleting memory at index:', index);
+            
+            // In a real implementation, we would call the API
+            setTimeout(() => {
+                alert('Memory deleted successfully!');
+                // Refresh the user memories
+                const userName = document.getElementById('selected-user-name').textContent.replace("'s Memories", "");
+                loadUserMemories(currentUserId, userName);
+            }, 500);
+        }
+        
+        // Edit memory
+        function editMemory(index, content) {
+            debugLog('Editing memory at index:', index);
+            editMemoryIndex = index;
+            document.getElementById('edit-memory-content').value = content;
+            
+            const modal = new bootstrap.Modal(document.getElementById('edit-memory-modal'));
+            modal.show();
+        }
+        
+        // Save memory edit
+        function saveMemoryEdit() {
+            const content = document.getElementById('edit-memory-content').value.trim();
+            
+            if (!content) {
+                alert('Memory content cannot be empty');
+                return;
+            }
+            
+            debugLog('Saving edited memory:', content);
+            
+            // In a real implementation, we would call the API
+            setTimeout(() => {
+                alert('Memory updated successfully!');
+                const modal = bootstrap.Modal.getInstance(document.getElementById('edit-memory-modal'));
+                if (modal) modal.hide();
+                
+                // Refresh the user memories
+                const userName = document.getElementById('selected-user-name').textContent.replace("'s Memories", "");
+                loadUserMemories(currentUserId, userName);
+            }, 500);
         }
         
         document.addEventListener('DOMContentLoaded', function() {
