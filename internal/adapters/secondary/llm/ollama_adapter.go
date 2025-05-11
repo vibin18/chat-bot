@@ -27,14 +27,15 @@ type OllamaAdapter struct {
 
 // NewOllamaAdapter creates a new OllamaAdapter
 func NewOllamaAdapter(config *config.LLMConfig, log logger.Logger) (*OllamaAdapter, error) {
-	log.Info("Creating Ollama adapter", "endpoint", config.Ollama.Endpoint, "model", config.Ollama.Model)
+	log.Info("Initializing Ollama adapter", "endpoint", config.Ollama.Endpoint, "model", config.Ollama.Model)
 	
-	// Create Ollama client with the proper server URL
+	// Create Ollama client with the proper configuration
 	client, err := ollama.New(
 		ollama.WithServerURL(config.Ollama.Endpoint),
+		ollama.WithModel(config.Ollama.Model),
 	)
 	if err != nil {
-		log.Error("Failed to create Ollama client", "error", err)
+		log.Error("Failed to initialize Ollama client", "error", err)
 		return nil, err
 	}
 	
@@ -311,27 +312,64 @@ func formatMessagesAsPrompt(messages []domain.Message, model string, enableReaso
 		}
 	}
 
-	// Regular text-based message handling
-	// Add system instruction for conciseness
-	prompt := "System: You are a helpful assistant. Keep your responses concise and to the point unless the user specifically asks for detailed explanations or descriptions.\n\n"
+	// For regular text-based message handling, convert to proper chat format
+	// Create proper messages array for Ollama
+	type chatMessage struct {
+		Role    string `json:"role"`
+		Content string `json:"content"`
+	}
+
+	type chatRequest struct {
+		Model    string        `json:"model"`
+		Messages []chatMessage `json:"messages"`
+		Stream   bool          `json:"stream"`
+		Options  map[string]interface{} `json:"options,omitempty"`
+	}
+
+	// Build chat messages array
+	chatMessages := make([]chatMessage, 0, len(messages)+1)
 	
+	// Add system message
+	chatMessages = append(chatMessages, chatMessage{
+		Role:    "system",
+		Content: "You are a helpful assistant. Keep your responses concise and to the point unless the user specifically asks for detailed explanations or descriptions.",
+	})
+	
+	// Convert domain messages to chat messages
 	for i, msg := range messages {
-		if msg.Role == "user" {
-			// For any qwen3 model, add the /no_think suffix if reasoning is disabled
-			if strings.HasPrefix(model, "qwen3") && !enableReasoning && i == len(messages)-1 {
-				prompt += "User: " + msg.Content + "/no_think\n"
-			} else {
-				prompt += "User: " + msg.Content + "\n"
-			}
-		} else if msg.Role == "assistant" {
-			prompt += "Assistant: " + msg.Content + "\n"
+		role := msg.Role
+		content := msg.Content
+		
+		// For qwen3 models, apply reasoning toggle
+		if strings.HasPrefix(model, "qwen3") && !enableReasoning && 
+		   role == "user" && i == len(messages)-1 {
+			content = content + "/no_think"
 		}
+		
+		chatMessages = append(chatMessages, chatMessage{
+			Role:    role,
+			Content: content,
+		})
 	}
 	
-	// Add the final prompt for the assistant to respond
-	prompt += "Assistant: "
+	// Create request
+	request := chatRequest{
+		Model:    model,
+		Messages: chatMessages,
+		Stream:   false,
+		Options: map[string]interface{}{
+			"temperature": 0.7,
+			"num_predict": 1024, // Default max tokens
+		},
+	}
 	
-	return prompt
+	// Marshal to JSON
+	jsonData, err := json.Marshal(request)
+	if err != nil {
+		return fmt.Sprintf("Error formatting messages: %v", err)
+	}
+	
+	return string(jsonData)
 }
 
 // escape escapes special characters in strings to make them safe for JSON
