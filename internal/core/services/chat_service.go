@@ -2,7 +2,9 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -127,20 +129,37 @@ func (s *ChatService) GetModelName() string {
 	return "unknown"
 }
 
+// OllamaImageResponse represents the JSON response structure for Ollama image analysis
+type OllamaImageResponse struct {
+	Model     string `json:"model"`
+	CreatedAt string `json:"created_at"`
+	Message   struct {
+		Role    string `json:"role"`
+		Content string `json:"content"`
+	} `json:"message"`
+	Done bool `json:"done"`
+}
+
 // CompletionWithImageAnalysis performs image analysis using the dedicated image LLM
 func (s *ChatService) CompletionWithImageAnalysis(ctx context.Context, message domain.Message) (string, error) {
 	s.logger.Info("Processing image analysis request", "image_count", len(message.Images))
 	
-	// Update the message content if empty
-	if message.Content == "" {
-		message.Content = "Analyze the following image and provide a detailed description."
+	// Create a more detailed prompt for high-quality image analysis
+	prompt := "Provide an extremely detailed analysis of this image. Describe all visible elements, people, objects, colors, textures, text, and any other notable aspects. Explain what's happening in the image and provide relevant context. DO NOT mention that this is a base64 encoded image or refer to decoding in any way."
+	
+	// If user provided custom content, append it to our enhanced prompt
+	if message.Content != "" && message.Content != "Analyze the following image and provide a detailed description." {
+		prompt = message.Content + " " + prompt
 	}
+	
+	// Update the message with our enhanced prompt
+	message.Content = prompt
 	
 	// Create the message history with a system prompt for image analysis
 	messages := []domain.Message{
 		{
 			Role:    "system",
-			Content: "You are an AI assistant that specializes in analyzing and describing images in detail.",
+			Content: "You are an expert image analyst who provides comprehensive, detailed descriptions of image content. Always be thorough and precise. Never mention anything about base64 encoding or image format in your response.",
 			Type:    domain.MessageTypeText,
 		},
 		message,
@@ -163,14 +182,67 @@ func (s *ChatService) CompletionWithImageAnalysis(ctx context.Context, message d
 	s.logger.Info("Using model for image analysis", "model", modelName)
 	
 	// Generate the response using the appropriate LLM
-	response, err := llm.GenerateResponse(ctx, messages)
+	rawResponse, err := llm.GenerateResponse(ctx, messages)
 	
 	if err != nil {
 		s.logger.Error("Image analysis failed", "error", err)
 		return "", fmt.Errorf("image analysis failed: %v", err)
 	}
 	
-	return response, nil
+	// Try to parse the response as JSON first (Ollama may return JSON)
+	s.logger.Info("Raw image analysis response received", "length", len(rawResponse))
+	
+	// Post-process the response to remove any references to base64 encoded images
+	cleanedResponse := rawResponse
+	
+	// Check if this looks like JSON
+	if strings.HasPrefix(strings.TrimSpace(rawResponse), "{") {
+		var ollamaResp OllamaImageResponse
+		if err := json.Unmarshal([]byte(rawResponse), &ollamaResp); err == nil {
+			// Successfully parsed JSON response
+			if ollamaResp.Message.Content != "" {
+				cleanedResponse = ollamaResp.Message.Content
+				s.logger.Info("Extracted content from JSON response", "json_length", len(rawResponse), "content_length", len(cleanedResponse))
+			}
+		}
+	}
+	
+	// Remove any references to base64 encoding in the response
+	cleanedResponse = removeBase64References(cleanedResponse)
+	
+	return cleanedResponse, nil
+}
+
+// removeBase64References removes references to base64 encoding from the response
+func removeBase64References(text string) string {
+	// Define patterns to remove
+	patterns := []string{
+		"This is a base64 encoded image",
+		"base64 encoded image",
+		"base64 encoding",
+		"based on the base64 image",
+		"I can see a base64 encoded image",
+		"Decoding it reveals",
+		"decoding the image",
+		"encoded in base64",
+	}
+	
+	// Remove each pattern
+	result := text
+	for _, pattern := range patterns {
+		result = strings.ReplaceAll(result, pattern, "")
+	}
+	
+	// Clean up any double spaces created from removals
+	spaceRegex := regexp.MustCompile(`\s+`)
+	result = spaceRegex.ReplaceAllString(result, " ")
+	
+	// Clean up the start by removing any leading space and periods
+	result = strings.TrimSpace(result)
+	result = strings.TrimPrefix(result, ".")
+	result = strings.TrimSpace(result)
+	
+	return result
 }
 
 // processWebSearchRequest processes a user request that requires web search
