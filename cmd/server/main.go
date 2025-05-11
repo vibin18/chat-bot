@@ -111,6 +111,17 @@ func main() {
 		} else {
 			waAdapter = whatsappAdapter
 			
+			// Initialize memory database
+			log.Info("Initializing memory database")
+			memoryService, err := whatsappAdapter.InitializeMemoryDB()
+			if err != nil {
+				log.Error("Failed to initialize memory database", "error", err)
+			} else {
+				log.Info("Memory database initialized successfully")
+				// Connect the memory service to the WhatsApp adapter
+				whatsappAdapter.SetMemoryService(memoryService)
+			}
+			
 			// Start WhatsApp adapter in a goroutine
 			go func() {
 				log.Info("Starting WhatsApp adapter")

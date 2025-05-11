@@ -265,6 +265,12 @@ func (a *WhatsAppAdapter) getUserDisplayName(userID string) string {
 
 // GetUserMemories returns memories and context for a specific user in a conversation
 func (a *WhatsAppAdapter) GetUserMemories(conversationID, userID string) *ports.UserMemories {
+	// Use the persistent memory system if available
+	if a.memoryService != nil {
+		return a.GetUserPersistentMemories(conversationID, userID)
+	}
+	
+	// Fall back to in-memory implementation
 	a.mutex.RLock()
 	defer a.mutex.RUnlock()
 
@@ -299,6 +305,12 @@ func (a *WhatsAppAdapter) GetUserMemories(conversationID, userID string) *ports.
 
 // DeleteMemory deletes a specific memory from a conversation
 func (a *WhatsAppAdapter) DeleteMemory(conversationID string, memoryIndex int) bool {
+	// Use the persistent memory database if available
+	if a.memoryService != nil {
+		return a.DeletePersistentMemory(conversationID, memoryIndex)
+	}
+	
+	// Fall back to in-memory implementation
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
 
@@ -316,49 +328,72 @@ func (a *WhatsAppAdapter) DeleteMemory(conversationID string, memoryIndex int) b
 	// Get all user IDs for this conversation
 	userIDs := a.getUserIDsForConversation(conversationID)
 	
-	// Count memories to find which session contains our target index
-	currentIndex := 0
+	// Iterate through all users' memories to find the specified index
+	runningIndex := 0
 	for _, userID := range userIDs {
 		key := createSessionKey(userID, conversationID)
 		memories, exists := a.memoryManager.memories[key]
 		
-		if !exists || len(memories) == 0 {
+		if !exists {
 			continue
 		}
 		
-		if currentIndex <= memoryIndex && memoryIndex < currentIndex+len(memories) {
-			// Found the session containing our target memory
+		// If the target index is within this user's memories range
+		if memoryIndex >= runningIndex && memoryIndex < runningIndex+len(memories) {
 			targetUserID = userID
 			targetKey = key
-			indexWithinSession = memoryIndex - currentIndex
+			indexWithinSession = memoryIndex - runningIndex
 			break
 		}
 		
-		currentIndex += len(memories)
+		runningIndex += len(memories)
 	}
 	
+	// If we didn't find the target memory, return false
 	if targetUserID == "" {
-		// Didn't find the memory
 		return false
 	}
 	
-	// Get memories for this session
-	memories := a.memoryManager.memories[targetKey]
-	if indexWithinSession < 0 || indexWithinSession >= len(memories) {
+	// Get the memories for this user+conversation
+	memories, exists := a.memoryManager.memories[targetKey]
+	if !exists || indexWithinSession >= len(memories) {
 		return false
 	}
-
-	// Remove memory
+	
+	// Remove the memory at the specified index
 	a.memoryManager.memories[targetKey] = append(
 		memories[:indexWithinSession],
-		memories[indexWithinSession+1:]...,
+		memories[indexWithinSession+1:]...
 	)
-
+	
 	return true
 }
 
 // ClearAllMemories clears all memories for a conversation
 func (a *WhatsAppAdapter) ClearAllMemories(conversationID string) bool {
+	// For database-backed memories, we need to clear for each user separately
+	if a.memoryService != nil {
+		userIDs := a.getUserIDsForConversation(conversationID)
+		success := true
+		
+		for _, userID := range userIDs {
+			if !a.ClearAllPersistentMemories(userID, conversationID) {
+				success = false
+			}
+		}
+		
+		// Also clear in-memory context
+		a.mutex.Lock()
+		for _, userID := range userIDs {
+			key := createSessionKey(userID, conversationID)
+			delete(a.memoryManager.context, key)
+		}
+		a.mutex.Unlock()
+		
+		return success
+	}
+	
+	// Fall back to in-memory implementation
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
 
@@ -381,6 +416,12 @@ func (a *WhatsAppAdapter) ClearAllMemories(conversationID string) bool {
 
 // UpdateMemory updates the content of a specific memory
 func (a *WhatsAppAdapter) UpdateMemory(conversationID string, memoryIndex int, newContent string) bool {
+	// Use the persistent memory database if available
+	if a.memoryService != nil {
+		return a.UpdatePersistentMemory(conversationID, memoryIndex, newContent)
+	}
+	
+	// Fall back to in-memory implementation
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
 

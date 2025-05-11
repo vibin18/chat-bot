@@ -31,6 +31,7 @@ func (h *Handler) setupWhatsAppAdminRoutes(r chi.Router) {
 			r.Post("/clear", h.handleClearAllMemories)
 			r.Post("/update", h.handleUpdateMemory)
 			r.Post("/context/delete", h.handleDeleteContextMessage)
+			r.Post("/add", h.handleAddMemory)
 		})
 	})
 }

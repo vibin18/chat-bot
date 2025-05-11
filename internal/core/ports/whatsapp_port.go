@@ -98,4 +98,7 @@ type WhatsAppPort interface {
 	
 	// UpdateMemory updates the content of a specific memory
 	UpdateMemory(conversationID string, memoryIndex int, newContent string) bool
+	
+	// AddMemory adds a new memory for a user in a conversation
+	AddMemory(conversationID string, userID string, content string) bool
 }

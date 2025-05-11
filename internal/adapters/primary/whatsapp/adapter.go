@@ -37,6 +37,7 @@ type WhatsAppAdapter struct {
 	mutex        sync.RWMutex
 	limiter      *rate.Limiter // Rate limiter for WhatsApp API calls
 	memoryManager *MemoryManager // Memory manager for context and memories
+	memoryService *services.MemoryService // Service for persistent memory storage
 	formatter    *WhatsAppFormatter // Formatter for enhancing WhatsApp messages
 	responses    *PredefinedResponses // Handler for predefined responses
 }
