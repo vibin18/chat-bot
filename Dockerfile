@@ -39,7 +39,7 @@ RUN go mod tidy && \
 COPY . .
 
 # Build application
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /go/bin/chat-bot ./cmd/server
+RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-w -s" -o /go/bin/chat-bot ./cmd/server
 
 ############
 # Run stage
