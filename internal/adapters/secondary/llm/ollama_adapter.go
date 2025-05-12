@@ -224,6 +224,15 @@ Use emoji bullet points, clear headings, and short paragraphs for better readabi
 	
 	a.logger.Info("Received image analysis response", "status", resp.Status, "length", len(body))
 	
+	// Log the raw response to help debug issues
+	rawResponseSample := ""
+	if len(body) > 500 {
+		rawResponseSample = string(body[:500]) + "..."
+	} else {
+		rawResponseSample = string(body)
+	}
+	a.logger.Info("Raw LLM response", "raw_response", rawResponseSample)
+	
 	// Parse the response
 	type ollamaResponse struct {
 		Model     string         `json:"model"`
@@ -234,21 +243,40 @@ Use emoji bullet points, clear headings, and short paragraphs for better readabi
 	
 	var responseObj ollamaResponse
 	if err := json.Unmarshal(body, &responseObj); err != nil {
-		a.logger.Warn("Failed to parse response JSON", "error", err)
+		a.logger.Warn("Failed to parse response JSON", "error", err, "response_text", string(body))
 		// Return the raw response if parsing fails
 		return string(body), nil
 	}
+	
+	// Log the parsed response structure
+	a.logger.Info("Parsed LLM response structure", 
+		"model", responseObj.Model,
+		"has_message", responseObj.Message != nil,
+		"has_response_field", responseObj.Response != "",
+		"response_length", len(responseObj.Response))
 	
 	// Extract the content
 	var result string
 	if responseObj.Response != "" {
 		// Newer Ollama API format with Response field
 		result = responseObj.Response
-		a.logger.Info("Extracted response from 'response' field")
+		respSample := ""
+		if len(responseObj.Response) > 100 {
+			respSample = responseObj.Response[:100] + "..."
+		} else {
+			respSample = responseObj.Response
+		}
+		a.logger.Info("Extracted response from 'response' field", "sample", respSample)
 	} else if responseObj.Message != nil && responseObj.Message.Content != "" {
 		// Older Ollama API format with Message.Content field
 		result = responseObj.Message.Content
-		a.logger.Info("Extracted response from 'message.content' field")
+		msgSample := ""
+		if len(responseObj.Message.Content) > 100 {
+			msgSample = responseObj.Message.Content[:100] + "..."
+		} else {
+			msgSample = responseObj.Message.Content
+		}
+		a.logger.Info("Extracted response from 'message.content' field", "sample", msgSample)
 	} else {
 		// Fallback to the raw response
 		a.logger.Warn("Could not extract structured content from response")
