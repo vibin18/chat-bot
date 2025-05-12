@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"strings"
 
 	"github.com/vibin/chat-bot/internal/core/domain"
@@ -54,8 +55,19 @@ func (a *WhatsAppAdapter) extractImageData(evt *events.Message) (*ImageMessage, 
 		return nil, fmt.Errorf("failed to read image data: %v", err)
 	}
 
-	// Convert to base64
-	base64Img := base64.StdEncoding.EncodeToString(imgData)
+	// Get MIME type based on the image data header
+	mimeType := http.DetectContentType(imgData)
+	a.log.Info("Detected image type", "mime", mimeType)
+
+	// Create base64 data URL format that Ollama recognizes
+	// Format: data:<mime-type>;base64,<base64-data>
+	base64Img := fmt.Sprintf("data:%s;base64,%s", mimeType, base64.StdEncoding.EncodeToString(imgData))
+
+	// Log the length of the base64 image data to help debug
+	a.log.Info("Extracted image data", 
+		"size_bytes", len(imgData),
+		"base64_length", len(base64Img),
+		"format", mimeType)
 
 	// Get caption if any
 	caption := imgMsg.GetCaption()
