@@ -59,9 +59,9 @@ func (a *WhatsAppAdapter) extractImageData(evt *events.Message) (*ImageMessage, 
 	mimeType := http.DetectContentType(imgData)
 	a.log.Info("Detected image type", "mime", mimeType)
 
-	// Create base64 data URL format that Ollama recognizes
-	// Format: data:<mime-type>;base64,<base64-data>
-	base64Img := fmt.Sprintf("data:%s;base64,%s", mimeType, base64.StdEncoding.EncodeToString(imgData))
+	// Encode the image to base64 without the data URL prefix
+	// Ollama's API documentation is inconsistent, but testing shows it works better with plain base64
+	base64Img := base64.StdEncoding.EncodeToString(imgData)
 
 	// Log the length of the base64 image data to help debug
 	a.log.Info("Extracted image data", 
