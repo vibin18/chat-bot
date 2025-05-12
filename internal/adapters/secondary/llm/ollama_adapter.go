@@ -247,33 +247,45 @@ Use emoji bullet points, clear headings, and short paragraphs for better readabi
 	}
 	a.logger.Info("Raw LLM response", "raw_response", rawResponseSample)
 	
-	// Parse the response - the generate API has a different response format
-	type ollamaGenerateResponse struct {
-		Model     string `json:"model"`
-		CreatedAt string `json:"created_at"`
-		Response  string `json:"response"`
-		Done      bool   `json:"done"`
+	// Parse the response - based on the actual Ollama API response format
+	type ollamaResponseMessage struct {
+		Role    string   `json:"role"`
+		Content string   `json:"content"`
+		Images  []string `json:"images"`
+	}
+
+	type ollamaApiResponse struct {
+		Model            string               `json:"model"`
+		CreatedAt        string               `json:"created_at"`
+		Message          ollamaResponseMessage `json:"message"`
+		Done             bool                 `json:"done"`
+		TotalDuration    int64                `json:"total_duration"`
+		LoadDuration     int64                `json:"load_duration"`
+		PromptEvalCount  int                  `json:"prompt_eval_count"`
+		EvalCount        int                  `json:"eval_count"`
 	}
 	
-	// First try to parse as generate API response
-	var generateResp ollamaGenerateResponse
-	if err := json.Unmarshal(body, &generateResp); err == nil && generateResp.Response != "" {
-		// Successfully parsed as generate API response
-		a.logger.Info("Parsed LLM generate response", 
-			"model", generateResp.Model,
-			"done", generateResp.Done,
-			"response_length", len(generateResp.Response))
+	// Parse according to the actual Ollama API response format
+	var apiResp ollamaApiResponse
+	if err := json.Unmarshal(body, &apiResp); err == nil && apiResp.Message.Content != "" {
+		// Successfully parsed response
+		a.logger.Info("Parsed LLM API response", 
+			"model", apiResp.Model,
+			"done", apiResp.Done,
+			"response_length", len(apiResp.Message.Content),
+			"eval_count", apiResp.EvalCount,
+			"total_duration_ms", apiResp.TotalDuration/1000000)
 		
 		// Extract sample for logging
 		respSample := ""
-		if len(generateResp.Response) > 100 {
-			respSample = generateResp.Response[:100] + "..."
+		if len(apiResp.Message.Content) > 100 {
+			respSample = apiResp.Message.Content[:100] + "..."
 		} else {
-			respSample = generateResp.Response
+			respSample = apiResp.Message.Content
 		}
 		
-		a.logger.Info("Extracted response from generate API", "sample", respSample)
-		return generateResp.Response, nil
+		a.logger.Info("Extracted response from Ollama API", "sample", respSample)
+		return apiResp.Message.Content, nil
 	}
 	
 	// If generate API format fails, try the chat API format as fallback
