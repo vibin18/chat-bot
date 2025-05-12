@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/vibin/chat-bot/internal/adapters/secondary/imagegen"
+	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/binary/proto"
 	"go.mau.fi/whatsmeow/types/events"
 )
@@ -109,32 +110,92 @@ func (a *WhatsAppAdapter) sendGeneratedImage(evt *events.Message, imageData []by
 		return fmt.Errorf("no chat info available")
 	}
 
-	// Prepare upload
-	uploaded, err := a.client.Upload(context.Background(), imageData, "image/png")
+	// Create a context with appropriate timeout for upload
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	
+	// Log image details before attempting upload
+	a.log.Info("Preparing to upload image to WhatsApp", 
+		"image_size", len(imageData), 
+		"mime_type", "image/png",
+		"chat", evt.Info.Chat.String())
+	
+	// Verify image data
+	if len(imageData) == 0 {
+		return fmt.Errorf("empty image data")
+	}
+	
+	// Determine image type for logging purposes
+	imageFormat := "png"
+	if len(imageData) > 4 {
+		// Check header bytes
+		if imageData[0] == 0xFF && imageData[1] == 0xD8 && imageData[2] == 0xFF {
+			imageFormat = "jpeg"
+		} else if imageData[0] == 0x89 && imageData[1] == 0x50 && imageData[2] == 0x4E && imageData[3] == 0x47 {
+			imageFormat = "png"
+		}
+	}
+	a.log.Info("Detected image format from data", "format", imageFormat)
+	
+	// Import WhatsApp-specific media type for image
+	// For whatsmeow library, we use a constant rather than a string
+	// Prepare upload with appropriate media type
+	uploaded, err := a.client.Upload(ctx, imageData, whatsmeow.MediaImage)
 	if err != nil {
+		a.log.Error("Failed to upload image to WhatsApp", 
+			"error_type", fmt.Sprintf("%T", err),
+			"error_details", err.Error())
 		return fmt.Errorf("failed to upload image: %w", err)
 	}
+
+	// Log successful upload details
+	a.log.Info("Image uploaded successfully to WhatsApp servers",
+		"url_length", len(uploaded.URL),
+		"direct_path_length", len(uploaded.DirectPath),
+		"has_media_key", uploaded.MediaKey != nil)
 
 	// Update caption with emoji
 	captionWithEmoji := "🎨 Generated image: " + caption
 
-	// Create the message
+	// Add fallback text in case image doesn't display
+	imgTypeStr := "image/png"
+	mimeType := &imgTypeStr
+	
+	// Log the full upload details to help diagnose any issues
+	a.log.Info("WhatsApp upload details", 
+		"uploaded_url", uploaded.URL,
+		"uploaded_path", uploaded.DirectPath,
+		"file_length", len(imageData))
+
+	// Create the message with all required fields
 	imageMsg := &proto.Message{
 		ImageMessage: &proto.ImageMessage{
 			Caption:       &captionWithEmoji,
 			URL:           &uploaded.URL,
 			DirectPath:    &uploaded.DirectPath,
 			MediaKey:      uploaded.MediaKey,
-			Mimetype:      &[]string{"image/png"}[0],
+			Mimetype:      mimeType,
 			FileEncSHA256: uploaded.FileEncSHA256,
 			FileSHA256:    uploaded.FileSHA256,
 			FileLength:    &[]uint64{uint64(len(imageData))}[0],
 		},
 	}
+	
+	// Create a context with timeout for the send operation
+	sendCtx, cancelSend := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancelSend()
 
-	// Send the message
-	_, err = a.client.SendMessage(context.Background(), evt.Info.Chat, imageMsg)
+	// Send the message with detailed error handling
+	a.log.Info("Sending image message to WhatsApp chat", "chat_id", evt.Info.Chat.String())
+	_, err = a.client.SendMessage(sendCtx, evt.Info.Chat, imageMsg)
 	if err != nil {
+		a.log.Error("Failed to send image message to WhatsApp", 
+			"error_type", fmt.Sprintf("%T", err),
+			"error_details", err.Error(),
+			"chat_id", evt.Info.Chat.String())
+		
+		// Try to send as text message with link instead
+		a.sendReply(fmt.Sprintf("⚠️ I generated an image but couldn't send it directly. Description: %s", caption), evt)
 		return fmt.Errorf("failed to send image: %w", err)
 	}
 
