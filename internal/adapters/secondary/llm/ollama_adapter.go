@@ -104,18 +104,8 @@ func (a *OllamaAdapter) generateImageAnalysis(ctx context.Context, message domai
 	a.logger.Info("Processing image analysis using direct API call", "image_size", len(message.Images[0]))
 	
 	// Create a clear prompt for image analysis with formatting instructions for WhatsApp
-	prompt := `Analyze this image in detail and format your response as follows:
-
-1. Start with a "📷 IMAGE ANALYSIS" heading
-2. Provide a "📝 SUMMARY" section with a brief 1-2 sentence overview
-3. Include a "🔍 DETAILS" section with paragraphs about:
-   - 👥 People/subjects (if any)
-   - 🏞️ Scene/setting
-   - 🎨 Colors and visual elements
-   - 📜 Text content (if any)
-4. End with a "💡 CONTEXT" section if relevant
-
-Use emoji bullet points, clear headings, and short paragraphs for better readability in WhatsApp.`
+	prompt := `Find what is in this image and format your response with emoji bullet points, clear headings, and short paragraphs for better readability in WhatsApp
+	`
 	
 	// If the user provided a custom prompt, append it to our formatting instructions
 	if message.Content != "" && message.Content != "Analyze the following image and provide a detailed description." {
@@ -169,10 +159,6 @@ Use emoji bullet points, clear headings, and short paragraphs for better readabi
 		Model: a.config.Ollama.Model,
 		Messages: []ollamaMessage{
 			{
-				Role:    "system",
-				Content: "You are an expert image analyst that provides detailed, well-formatted descriptions. Create visually appealing responses with emojis, headings, and clear sections. Format your response for WhatsApp with good spacing, clear structure, and concise paragraphs.",
-			},
-			{
 				Role:    "user",
 				// Add a unique request ID to prevent caching
 				Content: prompt + " (Request ID: " + fmt.Sprintf("%d", timestamp) + ")",
@@ -194,6 +180,9 @@ Use emoji bullet points, clear headings, and short paragraphs for better readabi
 		a.logger.Error("Failed to marshal request", "error", err)
 		return "", err
 	}
+	
+	// Log the full JSON payload for debugging
+	a.logger.Info("Full JSON request payload", "request_json", string(requestJSON))
 	
 	// Create a timeout context
 	timeoutCtx, cancel := context.WithTimeout(ctx, time.Duration(a.config.Ollama.TimeoutSeconds)*time.Second)
