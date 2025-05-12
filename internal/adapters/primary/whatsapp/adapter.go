@@ -40,6 +40,7 @@ type WhatsAppAdapter struct {
 	memoryService *services.MemoryService // Service for persistent memory storage
 	formatter    *WhatsAppFormatter // Formatter for enhancing WhatsApp messages
 	responses    *PredefinedResponses // Handler for predefined responses
+	processedMsgs sync.Map // Track processed message IDs to prevent duplicates
 }
 
 // Conversation represents an active conversation
@@ -186,6 +187,17 @@ func (a *WhatsAppAdapter) eventHandler(rawEvt interface{}) {
 
 // handleMessage processes incoming WhatsApp messages
 func (a *WhatsAppAdapter) handleMessage(evt *events.Message) {
+	// Check for duplicate message processing
+	messageID := evt.Info.ID
+	if messageID != "" {
+		// Check if we've already processed this message
+		if _, alreadyProcessed := a.processedMsgs.LoadOrStore(messageID, true); alreadyProcessed {
+			a.log.Info("Skipping already processed message", "message_id", messageID)
+			return
+		}
+		a.log.Info("Processing new message", "message_id", messageID)
+	}
+	
 	// Skip direct messages as requested
 	if !evt.Info.IsGroup {
 		return

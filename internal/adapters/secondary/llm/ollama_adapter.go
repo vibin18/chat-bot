@@ -238,14 +238,13 @@ Use emoji bullet points, clear headings, and short paragraphs for better readabi
 	
 	a.logger.Info("Received image analysis response", "status", resp.Status, "length", len(body))
 	
-	// Log the raw response to help debug issues
-	rawResponseSample := ""
+	// Log the complete raw response to help debug issues
+	a.logger.Info("Raw LLM response", "raw_response", string(body))
+	
+	// Also log important parts of it to a separate logger level for better visualization
 	if len(body) > 500 {
-		rawResponseSample = string(body[:500]) + "..."
-	} else {
-		rawResponseSample = string(body)
+		a.logger.Debug("Raw LLM response (sample)", "raw_response_sample", string(body[:500]) + "...")
 	}
-	a.logger.Info("Raw LLM response", "raw_response", rawResponseSample)
 	
 	// Parse the response - based on the actual Ollama API response format
 	type ollamaResponseMessage struct {
@@ -276,15 +275,13 @@ Use emoji bullet points, clear headings, and short paragraphs for better readabi
 			"eval_count", apiResp.EvalCount,
 			"total_duration_ms", apiResp.TotalDuration/1000000)
 		
-		// Extract sample for logging
-		respSample := ""
-		if len(apiResp.Message.Content) > 100 {
-			respSample = apiResp.Message.Content[:100] + "..."
-		} else {
-			respSample = apiResp.Message.Content
-		}
+		// Log the full content for debugging
+		a.logger.Info("Extracted response from Ollama API", "full_content", apiResp.Message.Content)
 		
-		a.logger.Info("Extracted response from Ollama API", "sample", respSample)
+		// Also log the first portion for quicker viewing in condensed logs
+		if len(apiResp.Message.Content) > 100 {
+			a.logger.Debug("Response preview", "sample", apiResp.Message.Content[:100] + "...")
+		}
 		return apiResp.Message.Content, nil
 	}
 	
@@ -315,23 +312,21 @@ Use emoji bullet points, clear headings, and short paragraphs for better readabi
 	if responseObj.Response != "" {
 		// Newer Ollama API format with Response field
 		result = responseObj.Response
-		respSample := ""
+		a.logger.Info("Extracted response from 'response' field", "full_content", responseObj.Response)
+		
+		// Log a preview for easier reading in condensed logs
 		if len(responseObj.Response) > 100 {
-			respSample = responseObj.Response[:100] + "..."
-		} else {
-			respSample = responseObj.Response
+			a.logger.Debug("Response preview", "sample", responseObj.Response[:100] + "...")
 		}
-		a.logger.Info("Extracted response from 'response' field", "sample", respSample)
 	} else if responseObj.Message != nil && responseObj.Message.Content != "" {
 		// Older Ollama API format with Message.Content field
 		result = responseObj.Message.Content
-		msgSample := ""
+		a.logger.Info("Extracted response from 'message.content' field", "full_content", responseObj.Message.Content)
+		
+		// Log a preview for easier reading in condensed logs
 		if len(responseObj.Message.Content) > 100 {
-			msgSample = responseObj.Message.Content[:100] + "..."
-		} else {
-			msgSample = responseObj.Message.Content
+			a.logger.Debug("Response preview", "sample", responseObj.Message.Content[:100] + "...")
 		}
-		a.logger.Info("Extracted response from 'message.content' field", "sample", msgSample)
 	} else {
 		// Fallback to the raw response
 		a.logger.Warn("Could not extract structured content from response")
