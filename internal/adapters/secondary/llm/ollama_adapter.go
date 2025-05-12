@@ -3,6 +3,7 @@ package llm
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -134,6 +135,31 @@ Use emoji bullet points, clear headings, and short paragraphs for better readabi
 		Stream   bool            `json:"stream"`
 	}
 	
+	// Log verification of the image data being sent to the LLM
+	imageData := message.Images[0]
+	base64Sample := ""
+	if len(imageData) > 100 {
+		base64Sample = imageData[:100] + "..."
+	} else if len(imageData) > 0 {
+		base64Sample = imageData
+	}
+
+	// Calculate a checksum (using first 8 bytes) to match against what was extracted from WhatsApp
+	var checksum string
+	if len(imageData) >= 8 {
+		// For base64 data, we need to decode the first chunk first
+		decodeData, err := base64.StdEncoding.DecodeString(imageData[:12])
+		if err == nil && len(decodeData) >= 8 {
+			checksum = fmt.Sprintf("%x", decodeData[:8])
+		}
+	}
+	
+	a.logger.Info("Sending image to LLM", 
+		"base64_length", len(imageData),
+		"base64_prefix", base64Sample,
+		"checksum_first_8_bytes", checksum,
+		"model", a.config.Ollama.Model)
+
 	// Create the request with system message and user message
 	request := ollamaRequest{
 		Model: a.config.Ollama.Model,
@@ -145,7 +171,7 @@ Use emoji bullet points, clear headings, and short paragraphs for better readabi
 			{
 				Role:    "user",
 				Content: prompt,
-				Images:  []string{message.Images[0]},
+				Images:  []string{imageData},
 			},
 		},
 		Stream: false,

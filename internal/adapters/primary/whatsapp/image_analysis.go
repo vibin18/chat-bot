@@ -38,22 +38,46 @@ func (a *WhatsAppAdapter) hasImage(evt *events.Message) bool {
 
 // extractImageData extracts the image data and caption from a message
 func (a *WhatsAppAdapter) extractImageData(evt *events.Message) (*ImageMessage, error) {
+	a.log.Info("Extracting image data from message", "message_id", evt.Info.ID)
+	
 	imgMsg := evt.Message.GetImageMessage()
 	if imgMsg == nil {
+		a.log.Error("No image found in message")
 		return nil, errors.New("no image in message")
 	}
+	
+	// Log information about the image message
+	a.log.Info("WhatsApp image details", 
+		"image_id", imgMsg.GetFileSHA256(),
+		"mimetype", imgMsg.GetMimetype(),
+		"caption", imgMsg.GetCaption(),
+		"height", imgMsg.GetHeight(),
+		"width", imgMsg.GetWidth())
 
 	// Download the image
+	a.log.Info("Downloading image from WhatsApp")
 	img, err := a.client.Download(imgMsg)
 	if err != nil {
+		a.log.Error("Failed to download image", "error", err)
 		return nil, fmt.Errorf("failed to download image: %v", err)
 	}
+	
+	// Log the raw image size from WhatsApp
+	a.log.Info("Downloaded raw image", "size_bytes", len(img))
 
 	// Read the image data
 	imgData, err := io.ReadAll(bytes.NewReader(img))
 	if err != nil {
+		a.log.Error("Failed to read image data", "error", err)
 		return nil, fmt.Errorf("failed to read image data: %v", err)
 	}
+	
+	// Calculate a checksum (using first 8 bytes) to verify the image later
+	var checksum string
+	if len(imgData) >= 8 {
+		checksum = fmt.Sprintf("%x", imgData[:8])
+	}
+	a.log.Info("Image data verification", "checksum_first_8_bytes", checksum)
 
 	// Get MIME type based on the image data header
 	mimeType := http.DetectContentType(imgData)
@@ -63,11 +87,19 @@ func (a *WhatsAppAdapter) extractImageData(evt *events.Message) (*ImageMessage, 
 	// Ollama's API documentation is inconsistent, but testing shows it works better with plain base64
 	base64Img := base64.StdEncoding.EncodeToString(imgData)
 
-	// Log the length of the base64 image data to help debug
+	// Log the length and sample of the base64 image data to help debug
+	base64Sample := ""
+	if len(base64Img) > 100 {
+		base64Sample = base64Img[:100] + "..."
+	} else if len(base64Img) > 0 {
+		base64Sample = base64Img
+	}
+	
 	a.log.Info("Extracted image data", 
 		"size_bytes", len(imgData),
 		"base64_length", len(base64Img),
-		"format", mimeType)
+		"format", mimeType,
+		"base64_prefix", base64Sample)
 
 	// Get caption if any
 	caption := imgMsg.GetCaption()
