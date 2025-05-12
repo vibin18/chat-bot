@@ -254,7 +254,14 @@ func (a *WhatsAppAdapter) handleMessage(evt *events.Message) {
 		"is_reply", isReplyToBot, 
 		"is_mention", isMention)
 
-	// Higher priority for image processing if the message contains an image
+	// Check if this is an image generation request (highest priority)
+	if hasMessageText && a.isImageGenerationRequest(message) {
+		a.log.Info("Processing image generation request", "group", groupJID, "message", message)
+		go a.processAndReplyWithImageGeneration(conversationID, evt)
+		return
+	}
+
+	// Next priority for image analysis if the message contains an image
 	if hasImage {
 		// Even without caption text, process images in replies to bot
 		if isReplyToBot {
