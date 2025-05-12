@@ -63,13 +63,10 @@ func (a *WhatsAppAdapter) isReplyToBot(evt *events.Message) bool {
 			}
 		}
 		
-		// For now, assume any reply in our allowed groups is intended for the bot
-		// This assumption might be too broad for some use cases
-		groupJID := evt.Info.Chat.String()
-		if a.isGroupAllowed(groupJID) {
-			a.log.Info("Treating reply in allowed group as bot reply")
-			isFromBot = true
-		}
+		// We no longer assume any reply in allowed groups is meant for the bot
+		// Only respond if it's actually a reply to one of our messages
+		a.log.Info("Reply detection result", "is_from_bot", isFromBot)
+		// No code here - we only use the explicit checks above
 		
 		if isFromBot {
 			a.log.Info("Detected valid reply to bot")
