@@ -130,9 +130,10 @@ Use emoji bullet points, clear headings, and short paragraphs for better readabi
 	}
 	
 	type ollamaRequest struct {
-		Model    string          `json:"model"`
-		Messages []ollamaMessage `json:"messages"`
-		Stream   bool            `json:"stream"`
+		Model    string                 `json:"model"`
+		Messages []ollamaMessage        `json:"messages"`
+		Options  map[string]interface{} `json:"options,omitempty"`
+		Stream   bool                   `json:"stream"`
 	}
 	
 	// Log verification of the image data being sent to the LLM
@@ -160,7 +161,10 @@ Use emoji bullet points, clear headings, and short paragraphs for better readabi
 		"checksum_first_8_bytes", checksum,
 		"model", a.config.Ollama.Model)
 
-	// Create the request with system message and user message
+	// Create a timestamp to prevent caching
+	timestamp := time.Now().UnixNano()
+	
+	// Create the request with system message and user message in chat format
 	request := ollamaRequest{
 		Model: a.config.Ollama.Model,
 		Messages: []ollamaMessage{
@@ -170,26 +174,36 @@ Use emoji bullet points, clear headings, and short paragraphs for better readabi
 			},
 			{
 				Role:    "user",
-				Content: prompt,
+				// Add a unique request ID to prevent caching
+				Content: prompt + " (Request ID: " + fmt.Sprintf("%d", timestamp) + ")",
 				Images:  []string{imageData},
 			},
 		},
+		Options: map[string]interface{}{
+			"temperature": 0.7,
+			"seed": timestamp, // Use a unique seed for each request
+		},
 		Stream: false,
 	}
+
+	a.logger.Info("Sending unique request", "timestamp", timestamp, "model", a.config.Ollama.Model)
 	
 	// Marshal the request to JSON
 	requestJSON, err := json.Marshal(request)
 	if err != nil {
 		a.logger.Error("Failed to marshal request", "error", err)
-		return "", fmt.Errorf("failed to marshal request: %w", err)
+		return "", err
 	}
 	
 	// Create a timeout context
 	timeoutCtx, cancel := context.WithTimeout(ctx, time.Duration(a.config.Ollama.TimeoutSeconds)*time.Second)
 	defer cancel()
 	
-	// Create the HTTP request
+	// Ensure we're using the correct API endpoint for Ollama models
+	// The proper endpoint for Ollama multimodal models is /api/chat
 	url := fmt.Sprintf("%s/api/chat", a.config.Ollama.Endpoint)
+	a.logger.Info("Using Ollama API endpoint", "url", url)
+	
 	httpReq, err := http.NewRequestWithContext(timeoutCtx, "POST", url, bytes.NewBuffer(requestJSON))
 	if err != nil {
 		a.logger.Error("Failed to create HTTP request", "error", err)
@@ -233,7 +247,36 @@ Use emoji bullet points, clear headings, and short paragraphs for better readabi
 	}
 	a.logger.Info("Raw LLM response", "raw_response", rawResponseSample)
 	
-	// Parse the response
+	// Parse the response - the generate API has a different response format
+	type ollamaGenerateResponse struct {
+		Model     string `json:"model"`
+		CreatedAt string `json:"created_at"`
+		Response  string `json:"response"`
+		Done      bool   `json:"done"`
+	}
+	
+	// First try to parse as generate API response
+	var generateResp ollamaGenerateResponse
+	if err := json.Unmarshal(body, &generateResp); err == nil && generateResp.Response != "" {
+		// Successfully parsed as generate API response
+		a.logger.Info("Parsed LLM generate response", 
+			"model", generateResp.Model,
+			"done", generateResp.Done,
+			"response_length", len(generateResp.Response))
+		
+		// Extract sample for logging
+		respSample := ""
+		if len(generateResp.Response) > 100 {
+			respSample = generateResp.Response[:100] + "..."
+		} else {
+			respSample = generateResp.Response
+		}
+		
+		a.logger.Info("Extracted response from generate API", "sample", respSample)
+		return generateResp.Response, nil
+	}
+	
+	// If generate API format fails, try the chat API format as fallback
 	type ollamaResponse struct {
 		Model     string         `json:"model"`
 		CreatedAt string         `json:"created_at"`
@@ -243,13 +286,13 @@ Use emoji bullet points, clear headings, and short paragraphs for better readabi
 	
 	var responseObj ollamaResponse
 	if err := json.Unmarshal(body, &responseObj); err != nil {
-		a.logger.Warn("Failed to parse response JSON", "error", err, "response_text", string(body))
+		a.logger.Warn("Failed to parse response JSON for both formats", "error", err, "response_text", string(body))
 		// Return the raw response if parsing fails
 		return string(body), nil
 	}
 	
 	// Log the parsed response structure
-	a.logger.Info("Parsed LLM response structure", 
+	a.logger.Info("Parsed LLM chat response structure", 
 		"model", responseObj.Model,
 		"has_message", responseObj.Message != nil,
 		"has_response_field", responseObj.Response != "",
