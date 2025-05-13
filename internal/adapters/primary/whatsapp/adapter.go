@@ -138,9 +138,16 @@ func (a *WhatsAppAdapter) Connect(ctx context.Context) error {
 
 // Disconnect closes the connection to WhatsApp
 func (a *WhatsAppAdapter) Disconnect() error {
+	// Perform final memory sync before disconnecting
+	if a.memoryService != nil {
+		a.log.Info("Performing final memory sync before disconnecting")
+		a.syncAllMemories()
+		a.log.Info("Final memory sync completed")
+	}
+
+	// Disconnect the WhatsApp client
 	if a.client != nil {
 		a.client.Disconnect()
-		a.log.Info("Disconnected from WhatsApp")
 	}
 	return nil
 }
@@ -160,7 +167,28 @@ func (a *WhatsAppAdapter) Start(ctx context.Context) error {
 		}
 	}
 
+	// Create a ticker for periodic memory synchronization (every 5 minutes)
+	a.log.Info("Starting periodic memory synchronization")
+	memSyncTicker := time.NewTicker(5 * time.Minute)
+	
+	// Start memory sync goroutine
+	go func() {
+		for {
+			select {
+			case <-memSyncTicker.C:
+				a.syncAllMemories()
+			case <-ctx.Done():
+				a.log.Info("Context done, stopping memory sync ticker")
+				memSyncTicker.Stop()
+				// Perform final sync on shutdown
+				a.syncAllMemories()
+				return
+			}
+		}
+	}()
+
 	<-ctx.Done()
+	a.log.Info("WhatsApp adapter stopping")
 	return nil
 }
 

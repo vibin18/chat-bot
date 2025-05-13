@@ -19,7 +19,7 @@ func NewMemoryService(memoryDB *database.MemoryDatabase) *MemoryService {
 	}
 }
 
-// AddMemory adds a memory to the database
+// AddMemory adds a memory to the database with retry mechanism
 func (s *MemoryService) AddMemory(userID, conversationID, content string) error {
 	memory := &database.Memory{
 		UserID:        userID,
@@ -29,7 +29,23 @@ func (s *MemoryService) AddMemory(userID, conversationID, content string) error 
 		LastUsed:      time.Now(),
 		UseCount:      1,
 	}
-	return s.memoryDB.AddMemory(memory)
+	
+	// Implement retry logic for database operations
+	var err error
+	for retries := 0; retries < 3; retries++ {
+		err = s.memoryDB.AddMemory(memory)
+		if err == nil {
+			return nil // Success
+		}
+		
+		// Log the error and retry
+		log.Printf("Warning: Database operation failed (attempt %d/3): %v", retries+1, err)
+		time.Sleep(time.Duration(100*(retries+1)) * time.Millisecond) // Exponential backoff
+	}
+	
+	// All retries failed
+	log.Printf("ERROR: Failed to add memory to database after 3 attempts: %v", err)
+	return err
 }
 
 // GetUserMemories retrieves all memories for a specific user in a conversation
@@ -75,12 +91,15 @@ func (s *MemoryService) IncrementMemoryUseCount(id int64) error {
 }
 
 // SyncMemoriesFromCache syncs in-memory memories to the database
-func (s *MemoryService) SyncMemoriesFromCache(userID, conversationID string, contents []string) {
+func (s *MemoryService) SyncMemoriesFromCache(userID, conversationID string, contents []string) error {
+	var lastErr error
 	for _, content := range contents {
 		if err := s.AddMemory(userID, conversationID, content); err != nil {
 			log.Printf("Error syncing memory to database: %v", err)
+			lastErr = err
 		}
 	}
+	return lastErr
 }
 
 // GetMemoriesAsStrings gets all memories for a user/conversation as strings

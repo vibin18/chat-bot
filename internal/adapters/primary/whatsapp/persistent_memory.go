@@ -1,6 +1,7 @@
 package whatsapp
 
 import (
+	"fmt"
 	"log"
 	"time"
 
@@ -28,9 +29,10 @@ func (a *WhatsAppAdapter) SetMemoryService(memoryService *services.MemoryService
 }
 
 // SyncMemoryToDatabase syncs in-memory memories to the database
-func (a *WhatsAppAdapter) SyncMemoryToDatabase(userID, conversationID string) {
+func (a *WhatsAppAdapter) SyncMemoryToDatabase(userID, conversationID string) error {
 	if a.memoryService == nil {
-		return
+		a.log.Error("Cannot sync memories: memory service is not initialized")
+		return fmt.Errorf("memory service not initialized")
 	}
 
 	// Get memories from in-memory store
@@ -39,14 +41,88 @@ func (a *WhatsAppAdapter) SyncMemoryToDatabase(userID, conversationID string) {
 	memories := a.memoryManager.memories[key]
 	a.mutex.RUnlock()
 
+	// Log memory sync attempt
+	a.log.Info("Syncing memories to database", 
+		"user_id", userID, 
+		"conversation_id", conversationID, 
+		"memory_count", len(memories))
+
 	// Convert to string contents and sync to database
 	contents := make([]string, len(memories))
 	for i, memory := range memories {
 		contents[i] = memory.Content
+		a.log.Debug("Memory content to sync", "index", i, "content", memory.Content)
 	}
 
 	// Use the memory service to sync to database
-	a.memoryService.SyncMemoriesFromCache(userID, conversationID, contents)
+	err := a.memoryService.SyncMemoriesFromCache(userID, conversationID, contents)
+	if err != nil {
+		a.log.Error("Failed to sync memories to database", 
+			"error", err, 
+			"user_id", userID, 
+			"conversation_id", conversationID)
+		return err
+	}
+
+	a.log.Info("Successfully synced memories to database", 
+		"user_id", userID, 
+		"conversation_id", conversationID, 
+		"count", len(memories))
+	return nil
+}
+
+// syncAllMemories syncs all in-memory memories to the database
+// This is called periodically to ensure persistence
+func (a *WhatsAppAdapter) syncAllMemories() {
+	if a.memoryService == nil {
+		a.log.Error("Cannot sync all memories: memory service is not initialized")
+		return
+	}
+
+	// Get all active memory keys
+	a.mutex.RLock()
+	// Create a list of userID/conversationID pairs to sync
+	var memoryPairs []struct {
+		userID string
+		conversationID string
+	}
+
+	// Collect all SessionKeys to process
+	for key := range a.memoryManager.memories {
+		memoryPairs = append(memoryPairs, struct {
+			userID string
+			conversationID string
+		}{
+			userID: key.UserID,
+			conversationID: key.ConversationID,
+		})
+	}
+	a.mutex.RUnlock()
+
+	a.log.Info("Starting periodic sync of all memories", "pair_count", len(memoryPairs))
+
+	// Track success and failure counts
+	successCount := 0
+	failureCount := 0
+
+	// Iterate through all memory pairs and sync each one
+	for _, pair := range memoryPairs {
+		// Sync this specific user's memories
+		err := a.SyncMemoryToDatabase(pair.userID, pair.conversationID)
+		if err != nil {
+			a.log.Error("Failed to sync memories during periodic sync", 
+				"error", err, 
+				"user_id", pair.userID, 
+				"conversation_id", pair.conversationID)
+			failureCount++
+		} else {
+			successCount++
+		}
+	}
+
+	a.log.Info("Completed periodic sync of all memories", 
+		"success_count", successCount, 
+		"failure_count", failureCount)
 }
 
 // PersistMemory adds a new memory to both in-memory and database storage

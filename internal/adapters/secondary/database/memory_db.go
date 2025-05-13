@@ -2,6 +2,7 @@ package database
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -30,24 +31,80 @@ type Memory struct {
 
 // NewMemoryDatabase creates a new memory database
 func NewMemoryDatabase() (*MemoryDatabase, error) {
-	// Ensure data directory exists
-	dataDir := "./data"
-	if err := os.MkdirAll(dataDir, 0755); err != nil {
-		return nil, err
+	// Use /app/data in Docker, which maps to the persistent volume in docker-compose.yml
+	// This is the directory that gets mounted as a volume in Docker
+	dataDir := "/app/data"
+	
+	// Fallback to local ./data if running outside Docker
+	if _, err := os.Stat(dataDir); os.IsNotExist(err) {
+		dataDir = "./data"
+		log.Printf("INFO: Docker volume not found, using local data directory: %s", dataDir)
+	}
+	
+	// Ensure data directory exists with proper permissions
+	if err := os.MkdirAll(dataDir, 0777); err != nil {
+		log.Printf("ERROR: Failed to create data directory: %v", err)
+		return nil, fmt.Errorf("failed to create data directory: %w", err)
 	}
 
-	// Open SQLite database
+	// Verify the directory exists and has write permissions
+	if _, err := os.Stat(dataDir); os.IsNotExist(err) {
+		log.Printf("ERROR: Data directory does not exist after creation attempt: %v", err)
+		return nil, fmt.Errorf("data directory does not exist: %w", err)
+	}
+
+	// Log the full path for debugging
+	absPath, err := filepath.Abs(dataDir)
+	if err == nil {
+		log.Printf("INFO: Using data directory: %s", absPath)
+	}
+
+	// Open SQLite database with explicit journal mode and synchronous settings
 	dbPath := filepath.Join(dataDir, "memories.db")
-	db, err := sql.Open("sqlite3", dbPath)
+	log.Printf("INFO: Opening SQLite database at: %s", dbPath)
+	
+	// Create an empty file if it doesn't exist to ensure file is created with proper permissions
+	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+		log.Printf("INFO: Database file does not exist, creating it at: %s", dbPath)
+		emptyFile, err := os.Create(dbPath)
+		if err != nil {
+			log.Printf("ERROR: Failed to create database file: %v", err)
+			return nil, fmt.Errorf("failed to create database file: %w", err)
+		}
+		emptyFile.Close()
+		
+		// Set permissions to ensure it's writable
+		if err := os.Chmod(dbPath, 0666); err != nil {
+			log.Printf("WARN: Failed to set database file permissions: %v", err)
+		}
+	}
+	
+	// Use connection parameters that ensure durability
+	// Use absolute file URI format that's more reliable across platforms
+	dbURI := fmt.Sprintf("file:%s?_journal=WAL&_synchronous=NORMAL&cache=shared", dbPath)
+	log.Printf("INFO: Using database connection URI: %s", dbURI)
+	
+	db, err := sql.Open("sqlite3", dbURI)
 	if err != nil {
-		return nil, err
+		log.Printf("ERROR: Failed to open SQLite database: %v", err)
+		return nil, fmt.Errorf("failed to open SQLite database: %w", err)
+	}
+
+	// Verify we can actually connect to the database
+	if err := db.Ping(); err != nil {
+		log.Printf("ERROR: Failed to ping SQLite database: %v", err)
+		db.Close()
+		return nil, fmt.Errorf("failed to ping SQLite database: %w", err)
 	}
 
 	// Create database schema if it doesn't exist
 	if err := createSchema(db); err != nil {
+		log.Printf("ERROR: Failed to create database schema: %v", err)
 		db.Close()
-		return nil, err
+		return nil, fmt.Errorf("failed to create database schema: %w", err)
 	}
+	
+	log.Printf("INFO: SQLite memory database initialized successfully")
 
 	return &MemoryDatabase{
 		db:    db,
