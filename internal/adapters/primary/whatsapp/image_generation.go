@@ -91,7 +91,7 @@ func (a *WhatsAppAdapter) processAndReplyWithImageGeneration(conversationID stri
 	imageData, err := imageGen.GenerateImage(ctx, cmd.Prompt, cmd.Size)
 	if err != nil {
 		a.log.Error("Failed to generate image", "error", err)
-		a.sendReply("❌ Sorry, I couldn't generate that image: "+err.Error(), evt)
+		a.sendReply("😔 I'm sorry, I wasn't able to create an image from your prompt. Please try again with a different description or try later.", evt)
 		return
 	}
 
@@ -99,7 +99,7 @@ func (a *WhatsAppAdapter) processAndReplyWithImageGeneration(conversationID stri
 	err = a.sendGeneratedImage(evt, imageData, cmd.Prompt)
 	if err != nil {
 		a.log.Error("Failed to send generated image", "error", err)
-		a.sendReply("❌ The image was generated but I couldn't send it: "+err.Error(), evt)
+		a.sendReply("🙏 I created a beautiful image based on your prompt, but I'm having trouble sending it right now. Please try again in a moment.", evt)
 	}
 }
 
