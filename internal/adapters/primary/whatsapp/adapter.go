@@ -288,6 +288,13 @@ func (a *WhatsAppAdapter) handleMessage(evt *events.Message) {
 		go a.processAndReplyWithImageGeneration(conversationID, evt)
 		return
 	}
+	
+	// Check if this is a family request
+	if hasMessageText && a.isFamilyRequest(message) {
+		a.log.Info("Processing family request", "group", groupJID, "message", message)
+		go a.processAndReplyWithFamilyHandler(conversationID, message, evt)
+		return
+	}
 
 	// Next priority for image analysis if the message contains an image
 	if hasImage {
