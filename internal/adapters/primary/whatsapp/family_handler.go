@@ -27,9 +27,10 @@ func (a *WhatsAppAdapter) isFamilyRequest(message string) bool {
 func (a *WhatsAppAdapter) processAndReplyWithFamilyHandler(conversationID string, message string, evt *events.Message) {
 	a.log.Info("Processing family request", "conversation_id", conversationID)
 	
-	// Prepare the request payload with the full original message
+	// Prepare the request payload with the specified structure
 	requestBody, err := json.Marshal(map[string]string{
-		"message": message,
+		"action": "sendMessage",
+		"chatInput": message,
 	})
 	if err != nil {
 		a.log.Error("Failed to marshal family request", "error", err)
