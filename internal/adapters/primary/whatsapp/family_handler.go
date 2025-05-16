@@ -19,6 +19,10 @@ type FamilyResponse struct {
 
 // isFamilyRequest checks if a message is a family request
 func (a *WhatsAppAdapter) isFamilyRequest(message string) bool {
+	// First check if family service is enabled in config
+	if !a.config.FamilyService.Enabled {
+		return false
+	}
 	// Check for "@family" keyword in the message
 	return strings.Contains(strings.ToLower(message), "@family")
 }
@@ -38,12 +42,12 @@ func (a *WhatsAppAdapter) processAndReplyWithFamilyHandler(conversationID string
 		return
 	}
 	
-	// Send request to the family webhook
+	// Send request to the family webhook using configuration values
 	client := &http.Client{
-		Timeout: time.Second * 30,
+		Timeout: time.Second * a.config.FamilyService.TimeoutSeconds,
 	}
 	
-	webhookURL := "http://192.168.1.132:5678/webhook/f65ba2b8-582c-4575-b4b9-02b26edc3ea0/chat"
+	webhookURL := a.config.FamilyService.WebhookURL
 	resp, err := client.Post(
 		webhookURL,
 		"application/json",

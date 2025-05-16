@@ -61,6 +61,13 @@ type ImageLLMConfig struct {
 	Ollama   OllamaConfig `json:"ollama"`
 }
 
+// FamilyServiceConfig holds configuration for the family service webhook
+type FamilyServiceConfig struct {
+	Enabled        bool          `json:"enabled"`
+	WebhookURL     string        `json:"webhook_url"`
+	TimeoutSeconds time.Duration `json:"timeout_seconds"`
+}
+
 // WhatsAppConfig holds configuration for the WhatsApp integration
 type WhatsAppConfig struct {
 	Enabled      bool     `json:"enabled"`
@@ -69,6 +76,7 @@ type WhatsAppConfig struct {
 	TriggerWord  string   `json:"trigger_word"` // Deprecated: kept for backward compatibility
 	StoreDir     string   `json:"store_dir"`
 	AllowedGroups []string `json:"allowed_groups"`
+	FamilyService FamilyServiceConfig `json:"family_service"`
 }
 
 // LoadConfig loads configuration from a JSON file
@@ -159,6 +167,11 @@ func DefaultConfig() *Config {
 			TriggerWord:  "@sasi", // Deprecated: kept for backward compatibility
 			StoreDir:     "./data/whatsapp",
 			AllowedGroups: []string{},
+			FamilyService: FamilyServiceConfig{
+				Enabled:        true,
+				WebhookURL:     "http://192.168.1.132:5678/webhook/f65ba2b8-582c-4575-b4b9-02b26edc3ea0/chat",
+				TimeoutSeconds: 30,
+			},
 		},
 	}
 }
