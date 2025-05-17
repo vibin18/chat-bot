@@ -296,12 +296,7 @@ func (a *WhatsAppAdapter) handleMessage(evt *events.Message) {
 		return
 	}
 	
-	// Check if this is a food request
-	if hasMessageText && a.isFoodRequest(message) {
-		a.log.Info("Processing food request", "group", groupJID, "message", message)
-		go a.processAndReplyWithFoodHandler(conversationID, message, evt)
-		return
-	}
+	// Note: food request check moved to after image generation for better priority order
 
 	// Next priority for image analysis if the message contains an image
 	if hasImage {
@@ -330,6 +325,16 @@ func (a *WhatsAppAdapter) handleMessage(evt *events.Message) {
 		return
 	}
 
+	// Check special handlers first with the full message (before cleaning it)
+	// This is important because some special handlers need to detect keywords
+	
+	// Check if this is a food request
+	if hasMessageText && a.isFoodRequest(message) {
+		a.log.Info("Detected food request - processing", "message", message)
+		go a.processAndReplyWithFoodHandler(conversationID, message, evt)
+		return
+	}
+	
 	// Clean the message by removing the trigger word if present
 	cleanMessage := message
 	if isMention {

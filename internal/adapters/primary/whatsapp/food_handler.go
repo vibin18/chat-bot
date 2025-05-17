@@ -21,19 +21,27 @@ type FoodResponse struct {
 func (a *WhatsAppAdapter) isFoodRequest(message string) bool {
 	// First check if food service is enabled in config
 	if !a.config.FoodService.Enabled {
+		a.log.Info("Food service is disabled in config")
 		return false
 	}
+	
 	// Check for "@food" keyword in the message
-	return strings.Contains(strings.ToLower(message), "@food")
+	isFood := strings.Contains(strings.ToLower(message), "@food")
+	a.log.Info("Checking for @food keyword", "message", message, "is_food_request", isFood)
+	return isFood
 }
 
 // processAndReplyWithFoodHandler forwards the message to the food webhook and sends back the response
 func (a *WhatsAppAdapter) processAndReplyWithFoodHandler(conversationID string, message string, evt *events.Message) {
 	a.log.Info("Processing food request", "conversation_id", conversationID)
 	
-	// Prepare the request payload with the full original message
+	// Log the input message for debugging
+	a.log.Info("Food request message", "message", message)
+	
+	// Prepare the request payload with the appropriate structure
 	requestBody, err := json.Marshal(map[string]string{
-		"message": message,
+		"action": "sendMessage",
+		"chatInput": message,
 	})
 	if err != nil {
 		a.log.Error("Failed to marshal food request", "error", err)
