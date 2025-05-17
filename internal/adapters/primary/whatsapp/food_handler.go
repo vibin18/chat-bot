@@ -13,11 +13,11 @@ import (
 )
 
 // FoodResponse represents the response structure from the food webhook
-type FoodResponse struct {
-	Test string `json:"test"`
+type FoodArrayItem struct {
+	Text string `json:"text"`
 }
 
-// We need to be flexible with response parsing since the format may vary
+// We expect an array of FoodArrayItem objects
 
 // isFoodRequest checks if a message is a food request
 func (a *WhatsAppAdapter) isFoodRequest(message string) bool {
@@ -110,33 +110,43 @@ func (a *WhatsAppAdapter) processAndReplyWithFoodHandler(conversationID string, 
 	// Log the raw response for debugging
 	a.log.Info("Food webhook raw response", "body", string(body))
 	
-	// Try to parse the response as different formats
+	// Parse the response as an array of objects with text field
 	var response string
 	
-	// First attempt: try to parse as object with 'test' field
-	var foodResponse FoodResponse
-	if err := json.Unmarshal(body, &foodResponse); err == nil && foodResponse.Test != "" {
-		response = foodResponse.Test
-		a.log.Info("Successfully parsed food response as Test object", "response", response)
+	// Try to parse as array of objects with 'text' field
+	var foodArray []FoodArrayItem
+	if err := json.Unmarshal(body, &foodArray); err == nil && len(foodArray) > 0 && foodArray[0].Text != "" {
+		// Extract just the text value from the first item
+		response = foodArray[0].Text
+		a.log.Info("Successfully parsed food response as array with text field", "response", response)
 	} else {
-		// Second attempt: try to parse as a simple string
-		var rawString string
-		if err := json.Unmarshal(body, &rawString); err == nil {
-			response = rawString
-			a.log.Info("Successfully parsed food response as string", "response", response)
-		} else {
-			// Third attempt: try to parse as a map
-			var mapResponse map[string]interface{}
-			if err := json.Unmarshal(body, &mapResponse); err == nil {
-				// Convert the map to a string representation
-				resBytes, _ := json.MarshalIndent(mapResponse, "", "  ")
-				response = string(resBytes)
-				a.log.Info("Successfully parsed food response as map", "response", response)
+		// Fallback: try other formats
+		a.log.Error("Failed to parse food response as expected array format", "error", err)
+		
+		// Try to parse as a simple array without specific structure
+		var genericArray []interface{}
+		if err := json.Unmarshal(body, &genericArray); err == nil && len(genericArray) > 0 {
+			// Try to get text from first item if it's a map
+			if firstItem, ok := genericArray[0].(map[string]interface{}); ok {
+				if textValue, ok := firstItem["text"].(string); ok {
+					response = textValue
+					a.log.Info("Successfully parsed food response from generic array", "response", response)
+				} else {
+					// Just convert the first item to string
+					resBytes, _ := json.Marshal(firstItem)
+					response = string(resBytes)
+					a.log.Info("Using first array item as response", "response", response)
+				}
 			} else {
-				// Fall back to just using the raw response body
-				response = string(body)
-				a.log.Info("Using raw food response", "response", response)
+				// Just use the first item directly
+				resBytes, _ := json.Marshal(genericArray[0])
+				response = string(resBytes)
+				a.log.Info("Using first array item as string", "response", response)
 			}
+		} else {
+			// Last resort: just use the raw response
+			response = string(body)
+			a.log.Info("Using raw food response", "response", response)
 		}
 	}
 	
