@@ -295,6 +295,13 @@ func (a *WhatsAppAdapter) handleMessage(evt *events.Message) {
 		go a.processAndReplyWithFamilyHandler(conversationID, message, evt)
 		return
 	}
+	
+	// Check if this is a food request
+	if hasMessageText && a.isFoodRequest(message) {
+		a.log.Info("Processing food request", "group", groupJID, "message", message)
+		go a.processAndReplyWithFoodHandler(conversationID, message, evt)
+		return
+	}
 
 	// Next priority for image analysis if the message contains an image
 	if hasImage {
