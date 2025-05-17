@@ -38,12 +38,35 @@ func (a *WhatsAppAdapter) processAndReplyWithFoodHandler(conversationID string, 
 	a.log.Info("Processing food request", "conversation_id", conversationID)
 	
 	// Log the input message for debugging
-	a.log.Info("Food request message", "message", message)
+	a.log.Info("Food request message (original)", "message", message)
+	
+	// Clean the message by removing trigger words
+	cleanMessage := message
+	
+	// Remove all trigger words first
+	for _, triggerWord := range a.config.TriggerWords {
+		cleanMessage = strings.ReplaceAll(
+			strings.ToLower(cleanMessage),
+			strings.ToLower(triggerWord),
+			"",
+		)
+	}
+	
+	// Also remove the @food keyword
+	cleanMessage = strings.ReplaceAll(
+		strings.ToLower(cleanMessage),
+		"@food",
+		"",
+	)
+	
+	// Trim any extra whitespace
+	cleanMessage = strings.TrimSpace(cleanMessage)
+	a.log.Info("Food request message (cleaned)", "message", cleanMessage)
 	
 	// Prepare the request payload with the appropriate structure
 	requestBody, err := json.Marshal(map[string]string{
 		"action": "sendMessage",
-		"chatInput": message,
+		"chatInput": cleanMessage,
 	})
 	if err != nil {
 		a.log.Error("Failed to marshal food request", "error", err)
