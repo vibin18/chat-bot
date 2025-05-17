@@ -17,6 +17,8 @@ type FoodResponse struct {
 	Test string `json:"test"`
 }
 
+// We need to be flexible with response parsing since the format may vary
+
 // isFoodRequest checks if a message is a food request
 func (a *WhatsAppAdapter) isFoodRequest(message string) bool {
 	// First check if food service is enabled in config
@@ -82,18 +84,43 @@ func (a *WhatsAppAdapter) processAndReplyWithFoodHandler(conversationID string, 
 		return
 	}
 	
-	// Parse the response
+	// Log the raw response for debugging
+	a.log.Info("Food webhook raw response", "body", string(body))
+	
+	// Try to parse the response as different formats
+	var response string
+	
+	// First attempt: try to parse as object with 'test' field
 	var foodResponse FoodResponse
-	if err := json.Unmarshal(body, &foodResponse); err != nil {
-		a.log.Error("Failed to unmarshal food webhook response", "error", err)
-		a.sendReply("Sorry, I couldn't understand the response from the food service.", evt)
-		return
+	if err := json.Unmarshal(body, &foodResponse); err == nil && foodResponse.Test != "" {
+		response = foodResponse.Test
+		a.log.Info("Successfully parsed food response as Test object", "response", response)
+	} else {
+		// Second attempt: try to parse as a simple string
+		var rawString string
+		if err := json.Unmarshal(body, &rawString); err == nil {
+			response = rawString
+			a.log.Info("Successfully parsed food response as string", "response", response)
+		} else {
+			// Third attempt: try to parse as a map
+			var mapResponse map[string]interface{}
+			if err := json.Unmarshal(body, &mapResponse); err == nil {
+				// Convert the map to a string representation
+				resBytes, _ := json.MarshalIndent(mapResponse, "", "  ")
+				response = string(resBytes)
+				a.log.Info("Successfully parsed food response as map", "response", response)
+			} else {
+				// Fall back to just using the raw response body
+				response = string(body)
+				a.log.Info("Using raw food response", "response", response)
+			}
+		}
 	}
 	
 	// Record the message in conversation history
 	a.recordMessage(conversationID, fmt.Sprintf("User: %s", message))
-	a.recordMessage(conversationID, fmt.Sprintf("Bot: %s", foodResponse.Test))
+	a.recordMessage(conversationID, fmt.Sprintf("Bot: %s", response))
 	
 	// Send the response from the food webhook
-	a.sendReply(foodResponse.Test, evt)
+	a.sendReply(response, evt)
 }
