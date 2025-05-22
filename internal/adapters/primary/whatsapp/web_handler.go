@@ -75,7 +75,7 @@ func (a *WhatsAppAdapter) processAndReplyWithWebHandler(conversationID string, m
 	
 	// Prepare the request payload
 	requestBody, err := json.Marshal(map[string]string{
-		"query": cleanMessage,
+		"topic": cleanMessage,
 	})
 	if err != nil {
 		a.log.Error("Failed to marshal web search request", "error", err)
