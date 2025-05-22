@@ -75,6 +75,13 @@ type FoodServiceConfig struct {
 	TimeoutSeconds time.Duration `json:"timeout_seconds"`
 }
 
+// WebServiceConfig holds configuration for the web search service webhook
+type WebServiceConfig struct {
+	Enabled        bool          `json:"enabled"`
+	WebhookURL     string        `json:"webhook_url"`
+	TimeoutSeconds time.Duration `json:"timeout_seconds"`
+}
+
 // WhatsAppConfig holds configuration for the WhatsApp integration
 type WhatsAppConfig struct {
 	Enabled      bool     `json:"enabled"`
@@ -85,6 +92,7 @@ type WhatsAppConfig struct {
 	AllowedGroups []string `json:"allowed_groups"`
 	FamilyService FamilyServiceConfig `json:"family_service"`
 	FoodService   FoodServiceConfig   `json:"food_service"`
+	WebService    WebServiceConfig    `json:"web_service"`
 }
 
 // LoadConfig loads configuration from a JSON file
@@ -183,6 +191,11 @@ func DefaultConfig() *Config {
 			FoodService: FoodServiceConfig{
 				Enabled:        true,
 				WebhookURL:     "http://192.168.1.132:5678/webhook/appify",
+				TimeoutSeconds: 30,
+			},
+			WebService: WebServiceConfig{
+				Enabled:        true,
+				WebhookURL:     "http://192.168.1.132:7000/search",
 				TimeoutSeconds: 30,
 			},
 		},

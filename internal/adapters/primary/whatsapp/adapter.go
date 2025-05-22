@@ -335,6 +335,13 @@ func (a *WhatsAppAdapter) handleMessage(evt *events.Message) {
 		return
 	}
 	
+	// Check if this is a web search request
+	if hasMessageText && a.isWebRequest(message) {
+		a.log.Info("Detected web search request - processing", "message", message)
+		go a.processAndReplyWithWebHandler(conversationID, message, evt)
+		return
+	}
+	
 	// Clean the message by removing the trigger word if present
 	cleanMessage := message
 	if isMention {
