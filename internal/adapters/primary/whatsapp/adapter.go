@@ -593,12 +593,21 @@ func (a *WhatsAppAdapter) isGroupAllowed(groupJID string) bool {
 
 // getMessageText extracts text from the message
 func (a *WhatsAppAdapter) getMessageText(evt *events.Message) string {
+	// Check for direct conversation text
 	if evt.Message.GetConversation() != "" {
 		return evt.Message.GetConversation()
 	}
 	
+	// Check for extended text message
 	if evt.Message.GetExtendedTextMessage() != nil {
 		return evt.Message.GetExtendedTextMessage().GetText()
+	}
+	
+	// Check for image caption
+	if evt.Message.GetImageMessage() != nil {
+		caption := evt.Message.GetImageMessage().GetCaption()
+		a.log.Info("Found image message with caption", "caption", caption)
+		return caption
 	}
 	
 	return ""
