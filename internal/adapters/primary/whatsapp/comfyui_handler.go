@@ -202,22 +202,25 @@ func (a *WhatsAppAdapter) processImageWithComfyUI(base64Image string, customProm
 			}
 		}
 		
-		// Update prompt node if we have a custom prompt
-		if customPrompt != "" && class == "CLIPTextEncode" && nodeID == "6" {
-			// This is the positive prompt node (step 6)
+		// Update prompt node if we have a custom prompt - find any CLIPTextEncode node
+		if customPrompt != "" && class == "CLIPTextEncode" && !promptNodeFound {
+			// This is a positive prompt node (any CLIPTextEncode node)
 			inputs, ok := nodeMap["inputs"].(map[string]interface{})
 			if ok {
-				// Save the original prompt for logging
-				originalPrompt, _ := inputs["text"].(string)
-				
-				// Update with the custom prompt
-				inputs["text"] = customPrompt
-				promptNodeFound = true
-				
-				a.log.Info("Updated prompt in node 6", 
-					"node_id", nodeID,
-					"original_prompt", originalPrompt,
-					"new_prompt", customPrompt)
+				// Check if this node has a text input field
+				if _, hasText := inputs["text"]; hasText {
+					// Save the original prompt for logging
+					originalPrompt, _ := inputs["text"].(string)
+					
+					// Update with the custom prompt
+					inputs["text"] = customPrompt
+					promptNodeFound = true
+					
+					a.log.Info("Updated prompt in CLIPTextEncode node", 
+						"node_id", nodeID,
+						"original_prompt", originalPrompt,
+						"new_prompt", customPrompt)
+				}
 			}
 		}
 	}
