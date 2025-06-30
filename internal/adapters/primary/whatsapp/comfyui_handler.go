@@ -339,10 +339,10 @@ func (a *WhatsAppAdapter) processImageWithComfyUI(base64Image string, customProm
 							a.log.Info("ComfyUI output details", "filename", output.Filename, "type", output.Type, "subfolder", output.SubfolderId)
 							if output.Type == "image" {
 								// Found an image output
-								imageURL := fmt.Sprintf("%s/view?filename=%s&subfolder=%s&type=%s",
+								// Use the exact view endpoint format
+								imageURL := fmt.Sprintf("%s/view?filename=%s&type=%s",
 									a.config.ComfyUIService.Endpoint,
 									output.Filename,
-									output.SubfolderId,
 									output.Type)
 								
 								// Download the image to send it via WhatsApp
