@@ -289,8 +289,9 @@ func (a *WhatsAppAdapter) processImageWithComfyUI(base64Image string, customProm
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(a.config.ComfyUIService.TimeoutSeconds)*time.Second)
 	defer cancel()
 
-	// Try to get the status multiple times
-	maxRetries := 60 // 1 minute if checking every second
+	// Try to get the status based on timeout configuration - poll every second
+	maxRetries := int(a.config.ComfyUIService.TimeoutSeconds)
+	a.log.Info("ComfyUI processing started", "timeout_seconds", a.config.ComfyUIService.TimeoutSeconds, "max_retries", maxRetries)
 	for retries := 0; retries < maxRetries; retries++ {
 		select {
 		case <-ctx.Done():
