@@ -283,9 +283,13 @@ func (a *WhatsAppAdapter) handleMessage(evt *events.Message) {
 		"is_mention", isMention)
 
 	// Check if this is a ComfyUI request (highest priority)
-	if hasMessageText && a.isComfyUIRequest(message) {
-		a.log.Info("Processing ComfyUI request", "group", groupJID, "message", message)
+	if hasMessageText && hasImage && a.isComfyUIRequest(message) {
+		a.log.Info("Processing ComfyUI request with image", "group", groupJID, "message", message)
 		go a.processAndReplyWithComfyUI(conversationID, evt)
+		return
+	} else if hasMessageText && a.isComfyUIRequest(message) {
+		a.log.Info("Received ComfyUI request but no image was attached", "group", groupJID, "message", message)
+		a.sendReply("Please attach an image to process with avarachan", evt)
 		return
 	}
 	
