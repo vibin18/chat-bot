@@ -82,6 +82,14 @@ type WebServiceConfig struct {
 	TimeoutSeconds time.Duration `json:"timeout_seconds"`
 }
 
+// ComfyUIServiceConfig holds configuration for the ComfyUI service
+type ComfyUIServiceConfig struct {
+	Enabled        bool          `json:"enabled"`
+	Endpoint       string        `json:"endpoint"`
+	WorkflowPath   string        `json:"workflow_path"`
+	TimeoutSeconds time.Duration `json:"timeout_seconds"`
+}
+
 // WhatsAppConfig holds configuration for the WhatsApp integration
 type WhatsAppConfig struct {
 	Enabled      bool     `json:"enabled"`
@@ -93,6 +101,7 @@ type WhatsAppConfig struct {
 	FamilyService FamilyServiceConfig `json:"family_service"`
 	FoodService   FoodServiceConfig   `json:"food_service"`
 	WebService    WebServiceConfig    `json:"web_service"`
+	ComfyUIService ComfyUIServiceConfig `json:"comfyui_service"`
 }
 
 // LoadConfig loads configuration from a JSON file
@@ -197,6 +206,12 @@ func DefaultConfig() *Config {
 				Enabled:        true,
 				WebhookURL:     "http://192.168.1.132:7000/search",
 				TimeoutSeconds: 30,
+			},
+			ComfyUIService: ComfyUIServiceConfig{
+				Enabled:        true,
+				Endpoint:       "http://192.168.1.245:9901",
+				WorkflowPath:   "./comfyui/flux_8_steps.json",
+				TimeoutSeconds: 60,
 			},
 		},
 	}

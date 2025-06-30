@@ -282,7 +282,14 @@ func (a *WhatsAppAdapter) handleMessage(evt *events.Message) {
 		"is_reply", isReplyToBot, 
 		"is_mention", isMention)
 
-	// Check if this is an image generation request (highest priority)
+	// Check if this is a ComfyUI request (highest priority)
+	if hasMessageText && a.isComfyUIRequest(message) {
+		a.log.Info("Processing ComfyUI request", "group", groupJID, "message", message)
+		go a.processAndReplyWithComfyUI(conversationID, evt)
+		return
+	}
+	
+	// Check if this is an image generation request (second priority)
 	if hasMessageText && a.isImageGenerationRequest(message) {
 		a.log.Info("Processing image generation request", "group", groupJID, "message", message)
 		go a.processAndReplyWithImageGeneration(conversationID, evt)
