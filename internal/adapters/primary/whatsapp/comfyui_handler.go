@@ -313,17 +313,30 @@ func (a *WhatsAppAdapter) processImageWithComfyUI(base64Image string, customProm
 					continue
 				}
 
+				// Log the raw response for debugging
+				if retries % 10 == 0 {
+					a.log.Info("ComfyUI status response polling", "retry", retries, "response_bytes", len(respBytes))
+				}
+
 				var historyResp ComfyUIHistoryResponse
 				if err := json.Unmarshal(respBytes, &historyResp); err != nil {
-					a.log.Error("Failed to parse history response", "error", err)
+					// Show truncated response in case of parse error
+					truncLen := 500
+					if len(respBytes) < truncLen {
+						truncLen = len(respBytes)
+					}
+					a.log.Error("Failed to parse history response", "error", err, "response", string(respBytes[:truncLen]))
 					continue
 				}
 
 				// Check if we have outputs
+				a.log.Info("ComfyUI history response received", "has_outputs", len(historyResp.Outputs) > 0, "output_count", len(historyResp.Outputs))
 				if len(historyResp.Outputs) > 0 {
 					// Find the first image output
-					for _, outputs := range historyResp.Outputs {
+					for nodeId, outputs := range historyResp.Outputs {
+						a.log.Info("ComfyUI output found", "node_id", nodeId, "output_count", len(outputs))
 						for _, output := range outputs {
+							a.log.Info("ComfyUI output details", "filename", output.Filename, "type", output.Type, "subfolder", output.SubfolderId)
 							if output.Type == "image" {
 								// Found an image output
 								imageURL := fmt.Sprintf("%s/view?filename=%s&subfolder=%s&type=%s",
@@ -331,8 +344,9 @@ func (a *WhatsAppAdapter) processImageWithComfyUI(base64Image string, customProm
 									output.Filename,
 									output.SubfolderId,
 									output.Type)
-									
+								
 								// Download the image to send it via WhatsApp
+								a.log.Info("Downloading ComfyUI generated image", "url", imageURL)
 								imageBytes, err := a.downloadImage(imageURL)
 								if err != nil {
 									return "", fmt.Errorf("failed to download generated image: %v", err)
@@ -344,12 +358,14 @@ func (a *WhatsAppAdapter) processImageWithComfyUI(base64Image string, customProm
 									return "", fmt.Errorf("failed to save output image: %v", err)
 								}
 								
+								a.log.Info("Successfully saved ComfyUI output image", "path", outputImagePath, "size_bytes", len(imageBytes))
 								return outputImagePath, nil
 							}
 						}
 					}
 				}
 			} else {
+				a.log.Warn("Received non-OK status from ComfyUI", "status", resp.Status)
 				resp.Body.Close()
 			}
 		}
