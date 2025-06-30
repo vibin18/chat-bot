@@ -250,6 +250,13 @@ func (a *WhatsAppAdapter) handleMessage(evt *events.Message) {
 	
 	// Check if it's an image message
 	hasImage := a.hasImage(evt)
+	
+	// Add detailed debug logging for image detection
+	if evt.Message.GetImageMessage() != nil {
+		a.log.Info("Image detected in message", "message_id", messageID, "mime", evt.Message.GetImageMessage().GetMimetype())
+	} else {
+		a.log.Info("No image found in message", "message_id", messageID)
+	}
 
 	// Check if message has a caption with trigger words if it's an image
 	hasMessageText := message != ""
@@ -283,11 +290,18 @@ func (a *WhatsAppAdapter) handleMessage(evt *events.Message) {
 		"is_mention", isMention)
 
 	// Check if this is a ComfyUI request (highest priority)
-	if hasMessageText && hasImage && a.isComfyUIRequest(message) {
+	isComfyRequest := a.isComfyUIRequest(message)
+	a.log.Info("ComfyUI request check", 
+		"is_comfy_request", isComfyRequest, 
+		"has_image", hasImage, 
+		"has_message_text", hasMessageText,
+		"message", message)
+	
+	if hasMessageText && hasImage && isComfyRequest {
 		a.log.Info("Processing ComfyUI request with image", "group", groupJID, "message", message)
 		go a.processAndReplyWithComfyUI(conversationID, evt)
 		return
-	} else if hasMessageText && a.isComfyUIRequest(message) {
+	} else if hasMessageText && isComfyRequest {
 		a.log.Info("Received ComfyUI request but no image was attached", "group", groupJID, "message", message)
 		a.sendReply("Please attach an image to process with avarachan", evt)
 		return
