@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"time"
 
@@ -46,7 +47,18 @@ type ComfyUIStatusResponse struct {
 
 // ComfyUIHistoryResponse represents the history response from the ComfyUI API
 type ComfyUIHistoryResponse struct {
-	Outputs map[string][]ComfyUIOutput `json:"outputs"`
+	Outputs map[string]interface{} `json:"outputs"`
+}
+
+// ComfyUIPromptHistoryResponse represents the full history response from the ComfyUI API
+type ComfyUIPromptHistoryResponse map[string]struct {
+	Outputs map[string]struct {
+		Images []ComfyUIOutput `json:"images"`
+	} `json:"outputs"`
+	Status struct {
+		Completed bool   `json:"completed"`
+		StatusStr string `json:"status_str"`
+	} `json:"status"`
 }
 
 // ComfyUIOutput represents an output from the ComfyUI workflow
@@ -284,9 +296,11 @@ func (a *WhatsAppAdapter) processImageWithComfyUI(base64Image string, customProm
 	if promptID == "" {
 		return "", fmt.Errorf("no prompt ID in response")
 	}
+	a.log.Info("ComfyUI processing request submitted", "prompt_id", promptID, "execution_id", comfyResp.ExecutionID)
 
 	// Poll for completion
 	statusURL := fmt.Sprintf("%s/history/%s", a.config.ComfyUIService.Endpoint, promptID)
+	a.log.Info("ComfyUI status URL", "url", statusURL)
 	
 	// Wait for completion with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(a.config.ComfyUIService.TimeoutSeconds)*time.Second)
@@ -316,13 +330,22 @@ func (a *WhatsAppAdapter) processImageWithComfyUI(base64Image string, customProm
 					continue
 				}
 
-				// Log the raw response for debugging
-				if retries % 10 == 0 {
-					a.log.Info("ComfyUI status response polling", "retry", retries, "response_bytes", len(respBytes))
+				// Log the raw response for debugging - more frequent at first, then every 10 tries
+				if retries < 5 || retries % 10 == 0 {
+					truncLen := 200
+					if len(respBytes) < truncLen {
+						truncLen = len(respBytes)
+					}
+					a.log.Info("ComfyUI status response polling", 
+						"prompt_id", promptID, 
+						"retry", retries, 
+						"response_bytes", len(respBytes),
+						"sample", string(respBytes[:truncLen]))
 				}
 
-				var historyResp ComfyUIHistoryResponse
-				if err := json.Unmarshal(respBytes, &historyResp); err != nil {
+				// Try to parse as the top-level prompt history response first
+				var promptHistoryResp ComfyUIPromptHistoryResponse
+				if err := json.Unmarshal(respBytes, &promptHistoryResp); err != nil {
 					// Show truncated response in case of parse error
 					truncLen := 500
 					if len(respBytes) < truncLen {
@@ -332,15 +355,38 @@ func (a *WhatsAppAdapter) processImageWithComfyUI(base64Image string, customProm
 					continue
 				}
 
-				// Check if we have outputs
-				a.log.Info("ComfyUI history response received", "has_outputs", len(historyResp.Outputs) > 0, "output_count", len(historyResp.Outputs))
-				if len(historyResp.Outputs) > 0 {
+				// Check if we have outputs in the prompt history response
+				a.log.Info("ComfyUI history response received", 
+					"prompt_id", promptID, 
+					"response_keys", fmt.Sprintf("%v", reflect.ValueOf(promptHistoryResp).MapKeys()))
+				
+				// Log full response occasionally for debugging
+				if retries == 0 || retries % 20 == 0 {
+					outputsJson, _ := json.MarshalIndent(promptHistoryResp, "", "  ")
+					a.log.Info("ComfyUI full response structure", "response_json", string(outputsJson))
+				}
+				
+				// Look for the prompt entry with our prompt ID
+				promptData, exists := promptHistoryResp[promptID]
+				if !exists {
+					a.log.Debug("Prompt ID not found in history response yet", "prompt_id", promptID)
+					continue
+				}
+				
+				// Check if processing is complete
+				a.log.Info("ComfyUI processing status", 
+					"prompt_id", promptID, 
+					"completed", promptData.Status.Completed, 
+					"status", promptData.Status.StatusStr,
+					"output_nodes", len(promptData.Outputs))
+				
+				if promptData.Status.Completed && promptData.Status.StatusStr == "success" {
 					// Find the first image output
-					for nodeId, outputs := range historyResp.Outputs {
-						a.log.Info("ComfyUI output found", "node_id", nodeId, "output_count", len(outputs))
-						for _, output := range outputs {
-							a.log.Info("ComfyUI output details", "filename", output.Filename, "type", output.Type, "subfolder", output.SubfolderId)
-							if output.Type == "image" {
+					for nodeId, outputs := range promptData.Outputs {
+						a.log.Info("ComfyUI output node found", "node_id", nodeId, "images_count", len(outputs.Images))
+						for _, output := range outputs.Images {
+							a.log.Info("ComfyUI output image details", "filename", output.Filename, "type", output.Type, "subfolder", output.SubfolderId)
+							if output.Type == "output" || output.Type == "image" {
 								// Found an image output
 								// Use the exact view endpoint format
 								imageURL := fmt.Sprintf("%s/view?filename=%s&type=%s",
