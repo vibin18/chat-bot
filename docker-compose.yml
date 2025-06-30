@@ -9,6 +9,7 @@ services:
     volumes:
       - ./config/config.json:/app/config/config.json
       - /root/chatbot-data:/app/data
+      - ./comfyui:/app/comfyui
     restart: unless-stopped
     environment:
       - TZ=Asia/Kolkata
