@@ -70,8 +70,9 @@ type ComfyUIOutput struct {
 
 // WhatsAppComfyRequest contains information from a ComfyUI request message
 type WhatsAppComfyRequest struct {
-	IsValid bool
-	Prompt  string
+	IsValid    bool
+	Prompt     string
+	HighQuality bool  // If true, use more steps for higher quality
 }
 
 // extractComfyUIRequest checks if a message is a ComfyUI request and extracts the prompt
@@ -82,12 +83,23 @@ func (a *WhatsAppAdapter) extractComfyUIRequest(message string) WhatsAppComfyReq
 		return WhatsAppComfyRequest{IsValid: false}
 	}
 	
-	// Extract the prompt - everything after "@img"
-	promptStart := strings.Index(messageLower, "@img") + len("@img")
-	prompt := strings.TrimSpace(message[promptStart:])
+	// Check if high quality mode is requested
+	highQuality := strings.Contains(messageLower, "@img=high")
+	
+	// Extract the prompt
+	var prompt string
+	if highQuality {
+		// For high quality, extract after "@img=high"
+		promptStart := strings.Index(messageLower, "@img=high") + len("@img=high")
+		prompt = strings.TrimSpace(message[promptStart:])
+	} else {
+		// For normal quality, extract after "@img"
+		promptStart := strings.Index(messageLower, "@img") + len("@img")
+		prompt = strings.TrimSpace(message[promptStart:])
+	}
 	
 	// If no prompt provided, use empty string (workflow will use its default)
-	return WhatsAppComfyRequest{IsValid: true, Prompt: prompt}
+	return WhatsAppComfyRequest{IsValid: true, Prompt: prompt, HighQuality: highQuality}
 }
 
 // isComfyUIRequest checks if a message is a ComfyUI request
@@ -125,7 +137,7 @@ func (a *WhatsAppAdapter) processAndReplyWithComfyUI(conversationID string, evt 
 		"image_size", len(imgData.Base64Image))
 
 	// Process the image with ComfyUI
-	imageURL, err := a.processImageWithComfyUI(imgData.Base64Image, comfyRequest.Prompt)
+	imageURL, err := a.processImageWithComfyUI(imgData.Base64Image, comfyRequest.Prompt, comfyRequest.HighQuality)
 	if err != nil {
 		a.log.Error("Failed to process image with ComfyUI", "error", err)
 		a.sendReply("Sorry, I couldn't process that image with ComfyUI. " + err.Error(), evt)
@@ -145,7 +157,7 @@ func (a *WhatsAppAdapter) processAndReplyWithComfyUI(conversationID string, evt 
 }
 
 // processImageWithComfyUI sends the image to the ComfyUI service for processing
-func (a *WhatsAppAdapter) processImageWithComfyUI(base64Image string, customPrompt string) (string, error) {
+func (a *WhatsAppAdapter) processImageWithComfyUI(base64Image string, customPrompt string, highQuality bool) (string, error) {
 	if !a.config.ComfyUIService.Enabled {
 		return "", fmt.Errorf("ComfyUI service is not enabled")
 	}
@@ -191,6 +203,9 @@ func (a *WhatsAppAdapter) processImageWithComfyUI(base64Image string, customProm
 	// Then, if a custom prompt is provided, find step 6 (CLIPTextEncode) and update the prompt
 	promptNodeFound := false
 	
+	// If high quality is requested, find scheduler nodes and update steps
+	schedulerFound := false
+	
 	for nodeID, nodeData := range workflow {
 		nodeMap, ok := nodeData.(map[string]interface{})
 		if !ok {
@@ -228,10 +243,25 @@ func (a *WhatsAppAdapter) processImageWithComfyUI(base64Image string, customProm
 					inputs["text"] = customPrompt
 					promptNodeFound = true
 					
-					a.log.Info("Updated prompt in CLIPTextEncode node", 
-						"node_id", nodeID,
-						"original_prompt", originalPrompt,
-						"new_prompt", customPrompt)
+					a.log.Info("Updated prompt node", "node_id", nodeID, "original_prompt", originalPrompt, "new_prompt", customPrompt)
+				}
+			}
+		}
+		
+		// Update scheduler steps if high quality mode is requested
+		if highQuality && class == "BasicScheduler" && !schedulerFound {
+			inputs, ok := nodeMap["inputs"].(map[string]interface{})
+			if ok {
+				// Check if this node has a steps field
+				if _, hasSteps := inputs["steps"]; hasSteps {
+					// Save the original steps for logging
+					originalSteps, _ := inputs["steps"].(float64)
+					
+					// Update with high quality steps (30)
+					inputs["steps"] = float64(30)
+					schedulerFound = true
+					
+					a.log.Info("Updated scheduler for high quality", "node_id", nodeID, "original_steps", originalSteps, "new_steps", 30)
 				}
 			}
 		}
@@ -241,6 +271,10 @@ func (a *WhatsAppAdapter) processImageWithComfyUI(base64Image string, customProm
 	found := imageLoaderFound
 	if customPrompt != "" {
 		a.log.Info("Custom prompt update result", "prompt_node_found", promptNodeFound)
+	}
+	
+	if highQuality {
+		a.log.Info("High quality mode active", "scheduler_updated", schedulerFound, "steps", 30)
 	}
 	
 	if !found {
