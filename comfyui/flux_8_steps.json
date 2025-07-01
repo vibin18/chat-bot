@@ -1,5 +1,4 @@
 {
-  "prompt":{
   "6": {
     "inputs": {
       "text": "Transform the image into a cartoon-style illustration while preserving the subject's facial expressions and identity. Apply a smooth, vibrant cartoon effect to the entire scene, but ensure that the face remains detailed and expressive, maintaining its original emotional tone",
@@ -283,4 +282,4 @@
       "title": "LoraLoaderModelOnly"
     }
   }
-}}
+}

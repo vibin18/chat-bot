@@ -106,9 +106,9 @@ func (a *WhatsAppAdapter) processAndReplyWithComfyUI(conversationID string, evt 
 	
 	// First, send a message that we're processing the image
 	if comfyRequest.Prompt != "" {
-		a.sendReply(fmt.Sprintf("avarachan is processing this image using your prompt: '%s'", comfyRequest.Prompt), evt)
+		a.sendReply(fmt.Sprintf("Avarachan is processing this image using your prompt: '%s'", comfyRequest.Prompt), evt)
 	} else {
-		a.sendReply("avarachan is processing this image using the default prompt, please wait a moment...", evt)
+		a.sendReply("Avarachan is processing this image using the default prompt, please wait a moment...", evt)
 	}
 
 	// Extract image data
@@ -141,7 +141,7 @@ func (a *WhatsAppAdapter) processAndReplyWithComfyUI(conversationID string, evt 
 	a.recordMessage(conversationID, promptText)
 
 	// Send the generated image back to the WhatsApp group
-	a.sendImageReply(imageURL, "Generated with ComfyUI", evt)
+	a.sendImageReply(imageURL, "Generated with Avarachan's Engine", evt)
 }
 
 // processImageWithComfyUI sends the image to the ComfyUI service for processing
